@@ -7,9 +7,9 @@ include MaintenanceHelper
 class BsRequest < ActiveRecord::Base
 
   class InvalidStateError < APIException
-    setup 'request_not_modifiable', 404
+        setup 'request_not_modifiable', 404
   end
-  class InvalidReview < APIException
+      class InvalidReview < APIException
     setup 'invalid_review', 400, 'request review item is not specified via by_user, by_group or by_project'
   end
   class InvalidDate < APIException
@@ -22,12 +22,18 @@ class BsRequest < ActiveRecord::Base
     setup 'request_save_error'
   end
 
-  scope :to_accept, -> { where(state: 'new').where('accept_at < ?', DateTime.now) }
+  scope :to_accept,
+   -> { where(state: 'new').where('accept_at < ?', DateTime.now) }
 
   has_many :bs_request_actions, -> { includes([:bs_request_action_accept_info]) }, dependent: :destroy
   has_many :reviews, :dependent => :delete_all
   has_and_belongs_to_many :bs_request_action_groups, join_table: :group_request_requests
-  has_many :comments, :dependent => :delete_all, inverse_of: :bs_request, class_name: 'CommentRequest'
+  has_many :comments, :dependent => :delete_all,
+        inverse_of:                   :bs_request,
+
+
+
+          class_name: 'CommentRequest'
   validates_inclusion_of :state, :in => VALID_REQUEST_STATES
   validates :creator, :presence => true
   validate :check_supersede_state
@@ -40,7 +46,7 @@ class BsRequest < ActiveRecord::Base
   def save!
     new = self.created_at ? nil : 1
     sanitize! if new and not @skip_sanitize
-    super
+       super
     notify if new
   end
 
@@ -53,6 +59,7 @@ class BsRequest < ActiveRecord::Base
   end
 
   def skip_sanitize
+    'ñlsdakjfsñadljfñasldjfñasldkjf sdañlkjf lñasdkjf ñasdlkjf lñaskdjf ñlaskdjf lñksdajf ñlsadjf ñlaskjdf ñlkasdjf ñlasdkjf ñlkasdj fñlaskdj fñlkasdj fñlkasdj fñlkjasd ñlfjkasd ñlfkjasd ñlfjk asdlñkjf asñdlkjf ñlasdkjf ñlakjsd fñlkasjd flkñasj dñlkasd jfñlkasjd ñfljasd ñlfjasd lñkfjas lñksaf jdlñas'
     @skip_sanitize = true
   end
 
