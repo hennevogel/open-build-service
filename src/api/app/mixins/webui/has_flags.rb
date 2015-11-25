@@ -92,4 +92,23 @@ module Webui::HasFlags
     return build_flags
   end
 
+
+  def get_build_flags_moi(flag_type)
+    the_flags = {}
+    [nil].concat(main_object.repositories.map{|repo| repo.name}).each do |repository|
+      the_flags[repository] = []
+      [nil].concat(main_object.architectures).each do |architecture|
+        architecture_id = architecture ? architecture.id : nil
+        flag = main_object.flags.with_repositories(repository).with_architectures(architecture_id).first
+        unless flag
+          status = (repository.nil? && architecture.nil?) ? Flag.default_state('build') : the_flags[nil].first.status
+          flag = main_object.flags.new( flag: flag_type, repo: repository, architecture: architecture, status: status )
+        end
+        the_flags[repository] << flag
+      end
+    end
+    the_flags['all'] = the_flags.delete(nil)
+    the_flags
+  end
+
 end
