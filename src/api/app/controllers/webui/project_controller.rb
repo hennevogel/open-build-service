@@ -294,6 +294,7 @@ class Webui::ProjectController < Webui::WebuiController
       redirect_to :action => :show, :project => params[:project]
       return
     end
+    @blah = get_build_flags
     @build = @project.flags.with_types('build')
     @debuginfo = @project.flags.with_types('debuginfo')
     @publish = @project.flags.with_types('publish')
