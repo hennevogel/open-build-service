@@ -111,4 +111,43 @@ module Webui::HasFlags
     the_flags
   end
 
+  def existing_flag(options = {})
+    main_object.flags.where(
+      repo: options[:repo], architecture: options[:architecture]
+    ).first
+  end
+
+  def temporary_flag(attributes = {})
+    attributes.update(flag: "build") # make it configurable
+    attributes[:status] = Flag.default_state("build") unless attributes[:status]
+
+    main_object.flags.new(attributes)
+  end
+
+  def fetch_flag(options = {})
+    existing_flag(options) || temporary_flag(options)
+  end
+
+  def get_build_flags_alt
+    flags = { "all" => [] }
+    flags["all"] << fetch_flag
+
+    status = flags["all"].first.status
+
+    main_object.architectures.each do |arch|
+      flags["all"] << fetch_flag(architecture: arch, status: status)
+    end
+
+    main_object.repositories.each do |repo|
+      flags[repo.name] = []
+      flags[repo.name] << fetch_flag(repo: repo.name, status: status)
+
+      main_object.architectures.each do |arch|
+        flags[repo.name] << fetch_flag(repo: repo.name, architecture: arch, status: status)
+      end
+    end
+
+    flags
+  end
+
 end
