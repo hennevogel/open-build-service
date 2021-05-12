@@ -184,6 +184,8 @@ group :development, :test do
   gem 'puma'
   # to drive headless chrome
   gem 'selenium-webdriver'
+  # to generate app maps
+  gem 'appmap'
 end
 
 group :development do

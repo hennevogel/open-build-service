@@ -1,6 +1,7 @@
 require_relative 'boot'
 
 require 'rails/all'
+require 'appmap/railtie' if defined?(AppMap)
 
 # Assets should be precompiled for production (so we don't need the gems loaded then)
 Bundler.require(*Rails.groups(assets: ['development', 'test']))
@@ -108,5 +109,7 @@ module OBSApi
       g.test_framework :rspec
       g.orm :active_record, primary_key_type: :integer
     end
+
+    config.appmap.enabled = true if ENV['APPMAP_RECORD']
   end
 end

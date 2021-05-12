@@ -8,6 +8,8 @@ end
 # to clean old unused cassettes
 require 'cassette_rewinder' if ENV['CLEAN_UNUSED_CASSETTES']
 
+require 'appmap/rspec'
+
 ENV['RAILS_ENV'] ||= 'test'
 require File.expand_path('../config/environment', __dir__)
 # Prevent database truncation if the environment is production

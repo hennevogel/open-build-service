@@ -1,0 +1,12 @@
+# 'name' should generally be the same as the code repo name.
+name: api
+packages:
+- path: app/controllers
+- path: app/models
+- path: app/jobs
+- path: app/helpers
+- path: app/lib
+# Include the gems that you want to see in the dependency maps.
+# These are just examples.
+# - gem: activerecord
+
