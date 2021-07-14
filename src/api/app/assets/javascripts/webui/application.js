@@ -13,8 +13,6 @@
 //= require jquery3
 //= require jquery_ujs
 //= require popper
-// FIXME remove jquery-ui file when we upgrade jquery-ui gem
-//= require webui/jquery-ui.min.js
 //= require bootstrap
 //= require cocoon
 //= require jquery.flot
