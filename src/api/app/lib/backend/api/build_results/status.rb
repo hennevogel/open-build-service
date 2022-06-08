@@ -22,6 +22,11 @@ module Backend
           http_get(['/build/:project/:repository/:architecture/:package/_reason', project_name, repository_name, architecture_name, package_name])
         end
 
+        def self.build_info(project_name:, package_name:, repository_name:, architecture_name:, debug: false)
+          params = { debug: 1 } if debug
+          http_get(['/build/:project/:repository/:architecture/:package/_buildinfo', project_name, repository_name, architecture_name, package_name], params: params)
+        end
+
         # Return the collected statistics (disk usage, mem usage, ...) of a package
         # @return [String]
         def self.statistics(project_name, package_name, repository_name, architecture_name)

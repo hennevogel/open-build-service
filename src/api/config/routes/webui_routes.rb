@@ -117,6 +117,10 @@ OBSApi::Application.routes.draw do
         get '/:project/:repository/:arch' => :index, as: :index, constraints: cons
       end
 
+      resource :build_info, controller: 'webui/packages/build_info', only: [] do
+        get '/:project/:repository/:arch' => :index, as: :index, constraints: cons
+      end
+
       resource :branches, controller: 'webui/packages/branches', only: [] do
         get '/:project', action: :new, as: :new, constraints: cons
       end
