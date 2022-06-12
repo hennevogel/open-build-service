@@ -39,6 +39,7 @@
 //= require webui/autocomplete.js
 //= require webui/comment.js
 //= require webui/request.js
+//= require webui/buildinfo.js
 //= require webui/buildresult.js
 //= require webui/job_history.js
 //= require webui/package-view_file.js
