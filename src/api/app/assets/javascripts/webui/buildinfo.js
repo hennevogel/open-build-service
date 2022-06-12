@@ -28,7 +28,16 @@ function normalizeData() {
   const packages = [];
   const distinctRepositories = new Set();
   $('#build-info-chained-dependencies').html(() => {
-    let chainedDependencies = "";
+    let chainedDependencies =
+      `<table>
+        <thead>
+          <tr>
+            <th>package name</th>
+            <th>requires</th>
+            <th>dependency name</th>
+            <th>repository</th>
+            </tr>
+          </thead>`;
     normalizedData.match(/added (.*) because of (.*)/g).forEach(element => {
       const matchingGroups = element.match(/added (.*) because of (.*)/);
       const extendedPackageName = matchingGroups[1];
@@ -39,10 +48,18 @@ function normalizeData() {
       packages.push(new Package(pkgName, pkgSource, requiredBy));
       distinctRepositories.add(pkgSource);
       const elementHtml = directDependencies.includes(requiredBy) ?
-        '<code><u>' + requiredBy + '</u></code> <i>requires</i> <code>' + pkgName + '</code> <small class="badge badge-primary">' + pkgSource + '</small>' :
-        '<code>' + requiredBy + '</code> <i>requires</i> <code>' + pkgName + '</code> <small class="badge badge-primary">' + pkgSource + '</small>';
-      chainedDependencies += '<div>' + elementHtml + '</div>';
+        `<td><strong>${requiredBy}</strong></td>
+        <td>--></td>
+        <td>${pkgName}</td>
+        <td><span class="badge badge-primary">${pkgSource}</span></td>`
+        :
+        `<td>${requiredBy}</td>
+        <td>--></td>
+        <td>${pkgName}</td>
+        <td><span class="badge badge-primary">${pkgSource}</span></td>`;
+      chainedDependencies += '<tr>' + elementHtml + '</tr>';
     });
+    chainedDependencies += '</table>';
     return chainedDependencies;
   });
 
