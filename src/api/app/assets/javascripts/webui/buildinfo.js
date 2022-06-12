@@ -6,6 +6,27 @@ class Package {
   }
 }
 
+function th(content) {
+  return `<th>${content}</th>`;
+}
+function tableHead() {
+  let content = '';
+  for (let i = 0; i < arguments.length; i++) {
+    content += th(arguments[i]);
+  }
+  return `
+    <thead>
+      ${row(content)}
+    </thead>`;
+}
+function col(htmlContent) {
+  return `<td>${htmlContent}</td>`;
+}
+
+function row(htmlContent) {
+  return `<tr>${htmlContent}</tr>`;
+}
+
 function normalizeData() {
   var rawData = $('#build-info-raw-data').text();
 
@@ -29,15 +50,7 @@ function normalizeData() {
   const distinctRepositories = new Set();
   $('#build-info-chained-dependencies').html(() => {
     let chainedDependencies =
-      `<table>
-        <thead>
-          <tr>
-            <th>package name</th>
-            <th>requires</th>
-            <th>dependency name</th>
-            <th>repository</th>
-            </tr>
-          </thead>`;
+      `<table>${tableHead('package name', 'requires', 'dependency name', 'repository')}`;
     normalizedData.match(/added (.*) because of (.*)/g).forEach(element => {
       const matchingGroups = element.match(/added (.*) because of (.*)/);
       const extendedPackageName = matchingGroups[1];
@@ -47,17 +60,14 @@ function normalizeData() {
 
       packages.push(new Package(pkgName, pkgSource, requiredBy));
       distinctRepositories.add(pkgSource);
-      const elementHtml = directDependencies.includes(requiredBy) ?
-        `<td><strong>${requiredBy}</strong></td>
-        <td>--></td>
-        <td>${pkgName}</td>
-        <td><span class="badge badge-primary">${pkgSource}</span></td>`
-        :
-        `<td>${requiredBy}</td>
-        <td>--></td>
-        <td>${pkgName}</td>
-        <td><span class="badge badge-primary">${pkgSource}</span></td>`;
-      chainedDependencies += '<tr>' + elementHtml + '</tr>';
+      chainedDependencies +=
+        row(
+          (directDependencies.includes(requiredBy) ?
+            col(`<strong>${requiredBy}</strong>`) : col(requiredBy)) +
+          col('-->') +
+          col(pkgName) +
+          col(`<span class="badge badge-primary">${pkgSource}</span>`)
+        );
     });
     chainedDependencies += '</table>';
     return chainedDependencies;
