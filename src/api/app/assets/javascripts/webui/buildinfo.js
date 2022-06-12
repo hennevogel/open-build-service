@@ -39,8 +39,8 @@ function normalizeData() {
       packages.push(new Package(pkgName, pkgSource, requiredBy));
       distinctRepositories.add(pkgSource);
       const elementHtml = directDependencies.includes(requiredBy) ?
-        pkgName + ' <small>[' + pkgSource + ']</small> << <span class="badge badge-secondary">' + requiredBy + '</span>' :
-        pkgName + ' <small>[' + pkgSource + ']</small> << ' + requiredBy;
+        '<code><u>' + requiredBy + '</u></code> <i>requires</i> <code>' + pkgName + '</code> <small class="badge badge-primary">' + pkgSource + '</small>' :
+        '<code>' + requiredBy + '</code> <i>requires</i> <code>' + pkgName + '</code> <small class="badge badge-primary">' + pkgSource + '</small>';
       chainedDependencies += '<div>' + elementHtml + '</div>';
     });
     return chainedDependencies;
