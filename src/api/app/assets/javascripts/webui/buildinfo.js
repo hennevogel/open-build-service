@@ -74,4 +74,18 @@ function normalizeData() {
     return chainedDependencies;
   });
   $('#count-total-dependencies').text(packages.length);
+
+  $('#sources').html(() => {
+    let sourcesHtml = '';
+    distinctSources.forEach(source => {
+      sourcesHtml += `<div class="font-weight-bold">${source}</div>`
+      sourcesHtml += `<ul>`
+      packages.filter(p => p.source == source)
+        .forEach(package => {
+          sourcesHtml += `<li>${package.name}</li>`
+        });
+        sourcesHtml += `</ul>`;
+    });
+    return sourcesHtml;
+  });
 }
