@@ -15,6 +15,9 @@ table {
 td, tr {
   border: 1px solid #ccc;
 }
+td, th {
+  padding: .2em .4em;
+}
 thead {
   background-color: #eee;
 }

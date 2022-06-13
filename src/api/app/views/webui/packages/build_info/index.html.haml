@@ -5,79 +5,79 @@
   .card-body
     %h3
       = @pagetitle
+    .row
+      %div.col-md-6
+        .card.mb-3
+          .card-header
+            %h5 Build Summary
+          .card-body
+            %div
+              %strong Package name:
+              #{@package.name}
+            %div
+              %strong Package description:
+              #{@package.description}
+            %div
+              %strong Repository:
+              .badge.badge-secondary #{@repository.name}
+            %div
+              %strong Architecture:
+              .badge.badge-primary #{@architecture}
+            %div
+              %strong Required Packages directly:
+              %span#count-direct-dependencies
+            %div
+              %strong Required Packages in total:
+              %span#count-total-dependencies
+            %div
+              %strong Project/Repositories used:
+              5
+            %div
+              %strong Errors:
+              %span#error-message.alert-error unresolvable: nothing provides _package_name_
 
-    %p
-      .card
-        .card-header
-          %h5 Build Summary
-        .card-body
-          %div
-            %strong Package name:
-            #{@package.name}
-          %div
-            %strong Package description:
-            #{@package.description}
-          %div
-            %strong Repository:
-            .badge.badge-secondary #{@repository.name}
-          %div
-            %strong Architecture:
-            .badge.badge-primary #{@architecture}
-          %div
-            %strong Required Packages directly:
-            %span#count-direct-dependencies
-          %div
-            %strong Required Packages in total:
-            %span#count-total-dependencies
-          %div
-            %strong Project/Repositories used:
-            5
-          %div
-            %strong Errors:
-            %span#error-message.alert-error unresolvable: nothing provides _package_name_
+      %div.col-md-6
+        .card.mb-3
+          .card-header
+            %h5 Projects and Packages
+          .card-body#sources
+            -# template below
+            %div
+              .text-info - openSUSE.org:SUSE:SLE-15-SP3:GA/pool
+              %ul
+                %li perl:libc.so.6(GLIBC_2.2.5)(64bit)
+                %li perl:libc.so.6(GLIBC_2.4)(64bit)
+                %li perl:libc.so.6(GLIBC_2.3)(64bit)
+                %li perl:libpthread.so.0(GLIBC_2.3.2)(64bit)
+                %li rpm-build:libc.so.6()(64bit)
+                %li rpm-build:libc.so.6(GLIBC_2.3)(64bit)
 
-    %p
-      .card
-        .card-header
-          %h5 Projects and Packages
-        .card-body#sources
-          -# template below
-          %div
-            .font-weight-bold - openSUSE.org:SUSE:SLE-15-SP3:GA/pool
-            %ul
-              %li perl:libc.so.6(GLIBC_2.2.5)(64bit)
-              %li perl:libc.so.6(GLIBC_2.4)(64bit)
-              %li perl:libc.so.6(GLIBC_2.3)(64bit)
-              %li perl:libpthread.so.0(GLIBC_2.3.2)(64bit)
-              %li rpm-build:libc.so.6()(64bit)
-              %li rpm-build:libc.so.6(GLIBC_2.3)(64bit)
-
-    %p
-      .card
-        .card-header
-          %h5 Dependency relationship
-        .card-body#dependency-relationship
-          -# template below
-          %table
-            %thead
-              %tr
-                %th who
-                %th.text-center requires
-                %th what
-                %th from
-            %tbody
-              %tr
-                %td
-                  (direct):perl
-                %td.text-center -->
-                %td perl
-                %td
-                  %span.badge.badge-primary openSUSE.org:SUSE:SLE-15-SP3:GA/pool
-      %br
-      %div
-        #show-raw-data show raw data
-        %code#build-info-raw-data.collapsed
-          = @buildinfo
+      %div.col-12
+        .card.mb-3
+          .card-header
+            %h5 Dependency relationship
+          .card-body#dependency-relationship
+            -# template below
+            %table
+              %thead
+                %tr
+                  %th who
+                  %th.text-center requires
+                  %th what
+                  %th from
+              %tbody
+                %tr
+                  %td
+                    (direct):perl
+                  %td.text-center -->
+                  %td perl
+                  %td
+                    %span.badge.badge-primary openSUSE.org:SUSE:SLE-15-SP3:GA/pool
+        %br
+        %div
+          #show-raw-data show raw data
+          %code#build-info-raw-data.collapsed
+            = @buildinfo
 
 :javascript
   normalizeData();

@@ -6,6 +6,7 @@ class Package {
   }
 }
 
+// utility classes to generate HTML
 function th(content) {
   return `<th>${content}</th>`;
 }
@@ -22,66 +23,76 @@ function tableHead() {
 function col(htmlContent, styleClass) {
   return `<td class="${styleClass}">${htmlContent}</td>`;
 }
-
 function row(htmlContent) {
   return `<tr>${htmlContent}</tr>`;
 }
 
+// main
 function normalizeData() {
   var rawData = $('#build-info-raw-data').text();
+
+  // relevant entities to compute on
+  const _PACKAGES = [];
+  const _DISTINCT_SOURCES = new Set();
+  let _DIRECT_DEPENDENCIES;
 
   // encoding and shaping newline properly
   var normalizedData = rawData.replace(/\\n/g, '\n');
   normalizedData = normalizedData.replace(/\",/g, '",\n');
 
   const errorMessage = normalizedData.match(/\"error\"\=\>\"(.*)\"/)[1];
-  $('#error-message').text(errorMessage);
+  $('#error-message').text(errorMessage); // summary
 
-  const directDependencies = normalizedData.match(/expand args: (.*)/)[1].split(' ');
-  $('#count-direct-dependencies').text(directDependencies.length);
+  _DIRECT_DEPENDENCIES = normalizedData.match(/expand args: (.*)/)[1].split(' ');
+  $('#count-direct-dependencies').text(_DIRECT_DEPENDENCIES.length); // summary
 
-  const packages = [];
-  const distinctSources = new Set();
+  // populate the dependencies table
   $('#dependency-relationship').html(() => {
-    let chainedDependencies =
-      `<table>${tableHead('who', 'requires', 'what', 'from')}`;
-    normalizedData.match(/added (.*) because of (.*)/g).forEach(element => {
-      const matchingGroups = element.match(/added (.*) because of (.*)/);
-      const extendedPackageName = matchingGroups[1];
-      const pkgName = extendedPackageName.split('@')[0];
-      const pkgSource = extendedPackageName.split('@')[1];
-      const requiredBy = matchingGroups[2];//.replace('(direct):', '');
+    let chainedDependenciesHtml = `<table>${tableHead('who', 'requires', 'what', 'from')}`;
+    normalizedData.match(/added (.*) because of (.*)/g)
+      .forEach(element => {
+        const matchingGroupsForAddedPackages = element.match(/added (.*) because of (.*)/);
+        if (matchingGroupsForAddedPackages.length > 0) {
+          const extendedPackageName = matchingGroupsForAddedPackages[1];
+          const pkgName = extendedPackageName.split('@')[0];
+          const pkgSource = extendedPackageName.split('@')[1];
+          const requiredBy = matchingGroupsForAddedPackages[2];//.replace('(direct):', '');
 
-      if (packages.filter(p => p.name === pkgName).length > 0) {
-        const package = packages.find(p => p.name === pkgName);
-        package.requiredBy.push(requiredBy);
-        package.sources.push(pkgSource);
-      }
-      else {
-        packages.push(new Package(pkgName, [pkgSource], [requiredBy]));
-      }
+          // deduplicate packages
+          if (_PACKAGES.filter(p => p.name === pkgName).length > 0) {
+            const package = _PACKAGES.find(p => p.name === pkgName);
+            package.requiredBy.push(requiredBy);
+            package.sources.push(pkgSource);
+          }
+          else {
+            _PACKAGES.push(new Package(pkgName, [pkgSource], [requiredBy]));
+          }
 
-      distinctSources.add(pkgSource);
+          _DISTINCT_SOURCES.add(pkgSource); // keep track of distinct sources
 
-      chainedDependencies +=
-        row(
-          (directDependencies.includes(requiredBy) ?
-            col(`<strong>${requiredBy}</strong>`) : col(requiredBy)) +
-          col('-->', 'text-center') +
-          col(pkgName) +
-          col(`<span class="badge badge-primary">${pkgSource}</span>`)
-        );
+          chainedDependenciesHtml +=
+            row(
+              (_DIRECT_DEPENDENCIES.includes(requiredBy) ? col(`<strong>${requiredBy}</strong>`) : col(requiredBy)) +
+              col('-->', 'text-center') +
+              col(pkgName) +
+              col(`<span class="text-info">${pkgSource}</span>`)
+            );
+        }
     });
-    chainedDependencies += '</table>';
-    return chainedDependencies;
+    if (_PACKAGES.length == 0) {
+      chainedDependenciesHtml += row(col('no packages found'));
+    }
+    chainedDependenciesHtml += '</table>';
+    return chainedDependenciesHtml;
   });
-  $('#count-total-dependencies').text(packages.length);
+  $('#count-total-dependencies').text(_PACKAGES.length); // summary
 
+  // populate project sources and packages
   $('#sources').html(() => {
     let sourcesHtml = '';
-    distinctSources.forEach(source => {
-      const packagesSubset = packages.filter(p => p.sources.includes(source));
-      sourcesHtml += `<div class="font-weight-bold source-name collapsed">${source} (${packagesSubset.length})</div>`
+    _DISTINCT_SOURCES.forEach(source => {
+      const packagesSubset = _PACKAGES.filter(p => p.sources.includes(source));
+      sourcesHtml += `<div class="text-info source-name collapsed">${source} (${packagesSubset.length})</div>`
       sourcesHtml += `<ul class="source-package-list collapsed">`
       packagesSubset.forEach(package => {
           sourcesHtml += `<li>${package.name}</li>`
