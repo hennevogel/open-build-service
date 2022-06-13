@@ -86,8 +86,8 @@ function normalizeData() {
   $('#sources').html(() => {
     let sourcesHtml = '';
     distinctSources.forEach(source => {
-      sourcesHtml += `<div class="font-weight-bold">${source}</div>`
-      sourcesHtml += `<ul>`
+      sourcesHtml += `<div class="font-weight-bold source-name collapsed">${source}</div>`
+      sourcesHtml += `<ul class="source-package-list collapsed">`
       packages.filter(p => p.source == source)
         .forEach(package => {
           sourcesHtml += `<li>${package.name}</li>`
@@ -96,4 +96,9 @@ function normalizeData() {
     });
     return sourcesHtml;
   });
+
+  $('.source-name').on('click', function() {
+    $(this).toggleClass('collapsed');
+    $(this).next('.source-package-list').toggleClass('collapsed');
+  })
 }

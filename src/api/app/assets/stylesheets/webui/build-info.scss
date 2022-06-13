@@ -18,3 +18,20 @@ td, tr {
 thead {
   background-color: #eee;
 }
+
+
+.source-name:hover {
+  text-decoration: underline;
+  color: #666;
+  cursor: default;
+}
+.source-name::before {
+  content: '-';
+  margin-right: .5em;
+}
+.source-name.collapsed:before {
+  content: '+';
+}
+.source-package-list.collapsed {
+  display: none;
+}
