@@ -39,13 +39,6 @@ function normalizeData() {
 
   const directDependencies = normalizedData.match(/expand args: (.*)/)[1].split(' ');
   $('#count-direct-dependencies').text(directDependencies.length);
-  $('#build-info-direct-dependencies').html(() => {
-    let deps = "";
-    directDependencies.forEach(element => {
-      deps += '<span class="badge badge-secondary">' + element + '</span>&nbsp;'
-    });
-    return deps;
-  });
 
   const packages = [];
   const distinctSources = new Set();
