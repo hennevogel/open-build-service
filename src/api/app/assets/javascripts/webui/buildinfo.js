@@ -35,9 +35,10 @@ function normalizeData() {
   normalizedData = normalizedData.replace(/\",/g, '",\n');
 
   const errorMessage = normalizedData.match(/\"error\"\=\>\"(.*)\"/)[1];
-  $('#build-info-error-message').text(errorMessage);
+  $('#error-message').text(errorMessage);
 
   const directDependencies = normalizedData.match(/expand args: (.*)/)[1].split(' ');
+  $('#count-direct-dependencies').text(directDependencies.length);
   $('#build-info-direct-dependencies').html(() => {
     let deps = "";
     directDependencies.forEach(element => {
@@ -72,6 +73,7 @@ function normalizeData() {
     chainedDependencies += '</table>';
     return chainedDependencies;
   });
+  $('#count-total-dependencies').text(packages.length);
 
   $('#build-info-repositories').html(() => {
     let distinctRepositoriesHtml = '';

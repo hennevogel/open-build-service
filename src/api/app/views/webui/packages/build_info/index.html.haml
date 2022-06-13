@@ -5,8 +5,37 @@
   .card-body
     %h3
       = @pagetitle
-    %h6.subtitle
-      Repository / Architecture: #{@repository.name} / #{@architecture}
+
+    %p
+      .card
+        .card-header
+          %h5 Build Summary
+        .card-body
+          %div
+            %strong Package name:
+            #{@package.name}
+          %div
+            %strong Package description:
+            #{@package.description}
+          %div
+            %strong Repository:
+            .badge.badge-secondary #{@repository.name}
+          %div
+            %strong Architecture:
+            .badge.badge-primary #{@architecture}
+          %div
+            %strong Required Packages directly:
+            %span#count-direct-dependencies
+          %div
+            %strong Required Packages in total:
+            %span#count-total-dependencies
+          %div
+            %strong Project/Repositories used:
+            5
+          %div
+            %strong Errors:
+            %span#error-message.alert-error unresolvable: nothing provides _package_name_
+
     %p
       %div
         %strong Error Message
