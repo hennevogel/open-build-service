@@ -90,8 +90,15 @@ function normalizeData() {
     return sourcesHtml;
   });
 
+  // `on click` events
   $('.source-name').on('click', function() {
     $(this).toggleClass('collapsed');
     $(this).next('.source-package-list').toggleClass('collapsed');
-  })
+  });
+  $('#show-raw-data').on('click', function() {
+    $('#build-info-raw-data').toggleClass('collapsed');
+    $('#build-info-raw-data').hasClass('collapsed') ?
+      $(this).text('show raw data') :
+      $(this).text('hide raw data');
+  });
 }
