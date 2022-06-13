@@ -48,7 +48,7 @@ function normalizeData() {
   });
 
   const packages = [];
-  const distinctRepositories = new Set();
+  const distinctSources = new Set();
   $('#build-info-chained-dependencies').html(() => {
     let chainedDependencies =
       `<table>${tableHead('package name', 'requires', 'dependency name', 'repository')}`;
@@ -60,7 +60,7 @@ function normalizeData() {
       const requiredBy = matchingGroups[2].replace('(direct):', '');
 
       packages.push(new Package(pkgName, pkgSource, requiredBy));
-      distinctRepositories.add(pkgSource);
+      distinctSources.add(pkgSource);
       chainedDependencies +=
         row(
           (directDependencies.includes(requiredBy) ?
@@ -74,12 +74,4 @@ function normalizeData() {
     return chainedDependencies;
   });
   $('#count-total-dependencies').text(packages.length);
-
-  $('#build-info-repositories').html(() => {
-    let distinctRepositoriesHtml = '';
-    Array.from(distinctRepositories).forEach(repo => {
-      distinctRepositoriesHtml += '<div class="badge badge-primary">' + repo + '</div>&nbsp;';
-    });
-    return distinctRepositoriesHtml;
-  });
 }
