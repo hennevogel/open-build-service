@@ -19,8 +19,8 @@ function tableHead() {
       ${row(content)}
     </thead>`;
 }
-function col(htmlContent) {
-  return `<td>${htmlContent}</td>`;
+function col(htmlContent, styleClass) {
+  return `<td class="${styleClass}">${htmlContent}</td>`;
 }
 
 function row(htmlContent) {
@@ -42,15 +42,15 @@ function normalizeData() {
 
   const packages = [];
   const distinctSources = new Set();
-  $('#build-info-chained-dependencies').html(() => {
+  $('#dependency-relationship').html(() => {
     let chainedDependencies =
-      `<table>${tableHead('package name', 'requires', 'dependency name', 'repository')}`;
+      `<table>${tableHead('who', 'requires', 'what', 'from')}`;
     normalizedData.match(/added (.*) because of (.*)/g).forEach(element => {
       const matchingGroups = element.match(/added (.*) because of (.*)/);
       const extendedPackageName = matchingGroups[1];
       const pkgName = extendedPackageName.split('@')[0];
       const pkgSource = extendedPackageName.split('@')[1];
-      const requiredBy = matchingGroups[2].replace('(direct):', '');
+      const requiredBy = matchingGroups[2];//.replace('(direct):', '');
 
       if (packages.filter(p => p.name === pkgName).length > 0) {
         const package = packages.find(p => p.name === pkgName);
@@ -66,7 +66,7 @@ function normalizeData() {
         row(
           (directDependencies.includes(requiredBy) ?
             col(`<strong>${requiredBy}</strong>`) : col(requiredBy)) +
-          col('-->') +
+          col('-->', 'text-center') +
           col(pkgName) +
           col(`<span class="badge badge-primary">${pkgSource}</span>`)
         );
