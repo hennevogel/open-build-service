@@ -59,8 +59,16 @@ function normalizeData() {
       const pkgSource = extendedPackageName.split('@')[1];
       const requiredBy = matchingGroups[2].replace('(direct):', '');
 
-      packages.push(new Package(pkgName, pkgSource, requiredBy));
+      if (packages.filter(p => p.name === pkgName).length > 0) {
+        const package = packages.find(p => p.name === pkgName);
+        package.requiredBy.push(requiredBy);
+      }
+      else {
+        packages.push(new Package(pkgName, pkgSource, [requiredBy]));
+      }
+
       distinctSources.add(pkgSource);
+
       chainedDependencies +=
         row(
           (directDependencies.includes(requiredBy) ?
