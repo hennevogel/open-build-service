@@ -1,7 +1,7 @@
 class Package {
-  constructor(name, source, requiredBy) {
+  constructor(name, sources, requiredBy) {
     this.name = name;
-    this.source = source;
+    this.sources = sources;
     this.requiredBy = requiredBy;
   }
 }
@@ -55,9 +55,10 @@ function normalizeData() {
       if (packages.filter(p => p.name === pkgName).length > 0) {
         const package = packages.find(p => p.name === pkgName);
         package.requiredBy.push(requiredBy);
+        package.sources.push(pkgSource);
       }
       else {
-        packages.push(new Package(pkgName, pkgSource, [requiredBy]));
+        packages.push(new Package(pkgName, [pkgSource], [requiredBy]));
       }
 
       distinctSources.add(pkgSource);
@@ -79,10 +80,10 @@ function normalizeData() {
   $('#sources').html(() => {
     let sourcesHtml = '';
     distinctSources.forEach(source => {
-      sourcesHtml += `<div class="font-weight-bold source-name collapsed">${source}</div>`
+      const packagesSubset = packages.filter(p => p.sources.includes(source));
+      sourcesHtml += `<div class="font-weight-bold source-name collapsed">${source} (${packagesSubset.length})</div>`
       sourcesHtml += `<ul class="source-package-list collapsed">`
-      packages.filter(p => p.source == source)
-        .forEach(package => {
+      packagesSubset.forEach(package => {
           sourcesHtml += `<li>${package.name}</li>`
         });
         sourcesHtml += `</ul>`;
