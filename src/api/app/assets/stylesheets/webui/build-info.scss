@@ -1,9 +1,11 @@
 #build-info-raw-data.collapsed {
   display: none;
 }
+
 #show-raw-data {
   cursor: default;
 }
+
 #show-raw-data:hover {
   text-decoration: underline;
 }
@@ -12,29 +14,34 @@ table {
   border-collapse: collapse;
   width: 100%;
 }
+
 td, tr {
   border: 1px solid #ccc;
 }
+
 td, th {
   padding: .2em .4em;
 }
+
 thead {
   background-color: #eee;
 }
-
 
 .source-name:hover {
   text-decoration: underline;
   color: #666;
   cursor: default;
 }
+
 .source-name::before {
-  content: '-';
+  content: "-";
   margin-right: .5em;
 }
+
 .source-name.collapsed:before {
-  content: '+';
+  content: "+";
 }
+
 .source-package-list.collapsed {
   display: none;
 }
