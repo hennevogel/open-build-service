@@ -23,7 +23,7 @@ module Event
         worker: payload['workerid'],
         arch: payload['arch'],
         reason: reason,
-        state: state,
+        state: self.class.name.demodulize.underscore.split('_').last,
         buildtype: payload['buildtype']
       }
     end

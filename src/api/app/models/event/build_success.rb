@@ -4,10 +4,6 @@ module Event
     self.description = 'Package has succeeded building'
 
     create_jobs :report_to_scm_job
-
-    def state
-      'success'
-    end
   end
 end
 

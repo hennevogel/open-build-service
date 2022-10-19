@@ -25,10 +25,6 @@ module Event
       h
     end
 
-    def state
-      'fail'
-    end
-
     private
 
     def faillog
