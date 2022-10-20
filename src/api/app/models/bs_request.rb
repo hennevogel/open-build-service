@@ -1001,6 +1001,39 @@ class BsRequest < ApplicationRecord
     !staging_project_id.nil?
   end
 
+  # Guess what people are doing from the types of actions this request includes
+  # :<action>                       -> a single action like submit or any other type
+  # :<action>_multiple              -> multiple <action> like submit or any other type
+  # :maintenance_incident           -> maintenance incident for a single package
+  # :maintenance_incident_multiple  -> maintanence incident for multiple packages
+  # :maintenance_release            -> maintenance release for a single package
+  # :maintenance_release_multiple   -> maintanence release for multiple packages
+  # :unknown                        -> any other combination
+  def action_breed
+    return bs_request_actions.first.type.to_sym if bs_request_actions.count == 1
+
+    my_action_types = bs_request_actions.pluck('DISTINCT type')
+
+    case my_action_types.sort
+    when ['delete', 'maintenance_incident'] # The delete action is for the incident staging project (IBS only patch...)
+      if bs_request_actions.where(type: :maintenance_incident).count == 1
+        :maintenance_incident
+      else
+        :maintenance_incident_multiple
+      end
+    when ['maintenance_release', 'submit'] # The submit actions are for the channel target
+      if bs_request_actions.where(type: :maintenance_release).without_patchinfo.count == 1
+        :maintenance_release
+      else
+        :maintenance_release_multiple
+      end
+    when ->(types) { types.count == 1 } # multiple actions of a single type
+      "#{my_action_types.first}_multiple".to_sym
+    else
+      :unknown
+    end
+  end
+
   private
 
   # returns true if we have reached a state that we can't get out anymore

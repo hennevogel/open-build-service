@@ -12,6 +12,8 @@ class BsRequestActionMaintenanceRelease < BsRequestAction
 
   #### Callbacks macros: before_save, after_save, etc.
   #### Scopes (first the default_scope macro if is used)
+
+  scope :without_patchinfo, -> { where.not(source_package: 'patchinfo') }
   #### Validations macros
 
   #### Class methods using self. (public and then private)
