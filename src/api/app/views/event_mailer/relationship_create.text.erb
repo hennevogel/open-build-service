@@ -1,3 +1,4 @@
+
 <% target_object, url = if event['package']
     ["#{event['project']}/#{event['package']}",
      url_for(controller: 'webui/package', action: :users, project: event['project'], package: event['package'], only_path: false, host: @host)]
@@ -6,5 +7,6 @@
      url_for(controller: 'webui/project', action: :users, project: event['project'], only_path: false, host: @host)]
   end
 -%>
+<% message.subject = "#{event['who']} made you #{event['role']} of #{target_object}" %>
 <%= "#{event['who']} made you #{event['role']} of #{target_object}" %>
 Visit <%= url %>.

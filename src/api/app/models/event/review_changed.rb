@@ -5,10 +5,6 @@ module Event
     payload_keys :reviewers, :by_user, :by_group, :by_project, :by_package
     receiver_roles :source_maintainer, :target_maintainer, :creator, :source_watcher, :target_watcher
 
-    def subject
-      "Request #{payload['number']} was reviewed (#{actions_summary})"
-    end
-
     def expanded_payload
       payload_with_diff
     end

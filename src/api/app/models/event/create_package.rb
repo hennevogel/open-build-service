@@ -4,10 +4,6 @@ module Event
     self.description = 'Package was created'
     payload_keys :project, :package, :sender
 
-    def subject
-      "New Package #{payload['project']}/#{payload['package']}"
-    end
-
     private
 
     def metric_tags

@@ -6,5 +6,6 @@ else
    url_for(controller: 'webui/project', action: :users, project: event['project'], only_path: false, host: @host)]
 end
 -%>
+<% message.subject = "#{event['who']} removed you as #{event['role']} of #{target_object}" %>
 <%= "#{event['who']} removed you as #{event['role']} of #{target_object}." %>
 Visit <%= url %>.

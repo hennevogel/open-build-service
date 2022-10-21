@@ -6,10 +6,6 @@ module Event
     receiver_roles :maintainer, :bugowner
     create_jobs :update_backend_infos_job
 
-    def subject
-      "Source service succeeded of #{payload['project']}/#{payload['package']}"
-    end
-
     def custom_headers
       h = super
       h['X-OBS-Package'] = "#{payload['project']}/#{payload['package']}"

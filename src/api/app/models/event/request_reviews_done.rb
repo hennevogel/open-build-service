@@ -2,10 +2,6 @@ module Event
   class RequestReviewsDone < RequestStatechange
     self.message_bus_routing_key = 'request.reviews_done'
     self.description = 'Request reviews are all done'
-
-    def subject
-      "Request #{payload['number']} was fully reviewed (#{actions_summary})"
-    end
   end
 end
 

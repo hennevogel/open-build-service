@@ -4,10 +4,6 @@ module Event
     self.description = 'Project is created'
     payload_keys :project, :sender
 
-    def subject
-      "New Project #{payload['project']}"
-    end
-
     private
 
     def metric_tags

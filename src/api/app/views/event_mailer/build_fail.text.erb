@@ -1,3 +1,4 @@
+<% message.subject = "Build failure of #{event['project']}/#{event['package']} in #{event['repository']}/#{event['arch']}" %>
 Visit <%= url_for(controller: 'webui/package', action: :live_build_log, project: event['project'], package: event['package'], repository: event['repository'], arch: event['arch'], only_path: false, host: @host) %>
 
 Package <%= event['project'] %>/<%= event['package']%> failed to build in <%= event['repository']%>/<%= event['arch']%>

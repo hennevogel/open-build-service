@@ -13,10 +13,6 @@ module Event
       base.merge('Message-ID' => my_message_number)
     end
 
-    def subject
-      "Request #{payload['number']} created by #{payload['who']} (#{actions_summary})"
-    end
-
     def expanded_payload
       payload_with_diff
     end

@@ -5,10 +5,6 @@ module Event
     self.description = 'New comment for package created'
     receiver_roles :maintainer, :bugowner, :watcher, :package_watcher
     payload_keys :project, :package, :sender
-
-    def subject
-      "New comment in package #{payload['project']}/#{payload['package']} by #{payload['commenter']}"
-    end
   end
 end
 

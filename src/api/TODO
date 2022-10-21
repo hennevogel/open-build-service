@@ -1,0 +1,3 @@
+- Pry Event::Base.title out of Notifications
+  - $ ack notification.title app
+  - Drop the colum from the Notification table

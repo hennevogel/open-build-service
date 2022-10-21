@@ -183,12 +183,6 @@ module Event
       save!
     end
 
-    # FIXME: This should be done in the event specific EmailMailer view
-    # https://guides.rubyonrails.org/action_mailer_basics.html#using-action-mailer-helpers
-    def subject
-      'Build Service Notification'
-    end
-
     # needs to return a hash (merge super)
     def custom_headers
       {}
@@ -287,8 +281,7 @@ module Event
       { event_type: eventtype,
         event_payload: payload,
         notifiable_id: payload['id'],
-        created_at: payload['when']&.to_datetime,
-        title: subject_to_title }
+        created_at: payload['when']&.to_datetime }
     end
 
     private
@@ -342,12 +335,6 @@ module Event
       # for now we define develpackage maintainers as being maintainers too
       receivers.concat(obj_roles(obj.develpackage, role)) if obj.respond_to?(:develpackage)
       receivers
-    end
-
-    def subject_to_title
-      return subject if subject.size <= 255
-
-      subject.slice(0, 252).concat('...')
     end
   end
 end

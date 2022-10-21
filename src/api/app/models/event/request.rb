@@ -40,15 +40,28 @@ module Event
     end
 
     def actions_summary
-      ret = []
-      payload.with_indifferent_access['actions'][0..BsRequest::ACTION_NOTIFY_LIMIT].each do |a|
-        str = "#{a['type']} #{a['targetproject']}"
-        str += "/#{a['targetpackage']}" if a['targetpackage']
-        str += "/#{a['targetrepository']}" if a['targetrepository']
-        ret << str
-      end
-      ret.join(', ')
+      'hans'
     end
+
+    # def request_name
+    #   @bs_request ||= BsRequest.find_by_number(payload['number'])
+    #   breed = @bs_request.action_breed
+    #   prefix = "Request" if breed == :unknown
+    #   prefix ||= "#{breed.to_s.humanize} request"
+    # end
+
+    # def request_summary
+    #   @bs_request ||= BsRequest.find_by_number(payload['number'])
+    #   breed = @bs_request.action_breed
+    #   if breed.end_with?('_multiple')
+    #   else
+    #     action = @bs_request.bs_request_actions.where(type: breed).first
+    #     summary = "#{action.targetproject}"
+    #     summary += "/#{action.targetpackage}" if action.targetpackage
+    #     summary += "/#{action.target_repository}" if action.targetrepository
+    #   end
+    #   "#{request_name} #{payload['number']} #{action} by #{originator} (#{request_summary})"
+    # end
 
     def payload_with_diff
       return payload if source_from_remote? || payload_without_source_project? || payload_without_target_project?

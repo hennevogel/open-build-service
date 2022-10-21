@@ -8,10 +8,6 @@ module Event
 
     create_jobs :report_to_scm_job
 
-    def subject
-      "Build failure of #{payload['project']}/#{payload['package']} in #{payload['repository']}/#{payload['arch']}"
-    end
-
     def expanded_payload
       payload.merge('faillog' => reencode_faillog(faillog))
     end

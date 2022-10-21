@@ -3,10 +3,6 @@ module Event
     self.description = 'Package was branched'
     self.message_bus_routing_key = 'package.branch'
     payload_keys :project, :package, :sender, :targetproject, :targetpackage, :user
-
-    def subject
-      "Package Branched: #{payload['project']}/#{payload['package']} => #{payload['targetproject']}/#{payload['targetpackage']}"
-    end
   end
 end
 

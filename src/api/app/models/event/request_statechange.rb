@@ -6,10 +6,6 @@ module Event
     receiver_roles :source_maintainer, :target_maintainer, :creator, :reviewer, :source_watcher, :target_watcher,
                    :source_package_watcher, :target_package_watcher, :request_watcher
 
-    def subject
-      "Request #{payload['number']} changed from #{payload['oldstate']} to #{payload['state']} (#{actions_summary})"
-    end
-
     def parameters_for_notification
       super.merge({ notifiable_type: 'BsRequest',
                     bs_request_state: payload['state'],
