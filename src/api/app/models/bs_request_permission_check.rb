@@ -2,7 +2,7 @@ class BsRequestPermissionCheck
   include BsRequest::Errors
 
   def cmd_addreview_permissions(permissions_granted)
-    raise ReviewChangeStateNoPermission, 'The request is not in state new or review' unless req.state.in?([:review, :new])
+    raise ReviewChangeStateNoPermission, "The request state (#{req.state}) is not changeable" unless req.changeable?
 
     req.bs_request_actions.each do |action|
       set_permissions_for_action(action)
@@ -52,7 +52,7 @@ class BsRequestPermissionCheck
     # Admin always ...
     return true if User.admin_session?
 
-    raise ReviewChangeStateNoPermission, 'The request is neither in state review nor new' unless req.state.in?([:review, :new])
+    raise ReviewChangeStateNoPermission, "The request state (#{req.state}) is not changeable" unless req.changeable?
     raise ReviewNotSpecified, 'The review must specified via by_user, by_group or by_project(by_package) argument.' unless by_user || by_group || by_package || by_project
     raise ReviewChangeStateNoPermission, "review state change is not permitted for #{User.session!.login}" if by_user && User.session! != by_user
     raise ReviewChangeStateNoPermission, "review state change for group #{by_group.title} is not permitted for #{User.session!.login}" if by_group && !User.session!.is_in_group?(by_group)

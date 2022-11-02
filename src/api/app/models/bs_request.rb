@@ -21,6 +21,8 @@ class BsRequest < ApplicationRecord
 
   OBSOLETE_STATES = [:declined, :superseded, :revoked].freeze
 
+  CHANGEABLE_STATES = [:new:, :review, :declined]
+
   ACTION_NOTIFY_LIMIT = 50
 
   scope :to_accept_by_time, -> { where(state: ['new', 'review']).where('accept_at < ?', Time.now) }
@@ -597,7 +599,7 @@ class BsRequest < ApplicationRecord
   end
 
   def assignreview(opts = {})
-    raise InvalidStateError, 'request is not in review state' unless state == :review || state == :new
+    raise ReviewChangeStateNoPermission, "The request state (#{state}) is not changeable" unless req.changeable?
 
     reviewer = User.find_by_login!(opts[:reviewer])
 
@@ -681,7 +683,7 @@ class BsRequest < ApplicationRecord
     with_lock do
       new_review_state = new_review_state.to_sym
 
-      raise InvalidStateError, 'request is not in review state' unless state == :review || (state == :new && new_review_state == :new)
+      raise InvalidStateError, 'request is not in review state' unless state == :review || (state.in?([:new, :declined]) && new_review_state == :new)
 
       check_if_valid_review!(opts)
       raise InvalidStateError, "review state must be new, accepted, declined or superseded, was #{new_review_state}" unless new_review_state.in?([:new, :accepted, :declined, :superseded])
@@ -1006,6 +1008,11 @@ class BsRequest < ApplicationRecord
   # returns true if we have reached a state that we can't get out anymore
   def conclusive?
     FINAL_REQUEST_STATES.include?(state)
+  end
+
+  # returns true if we have reached a state that we can get out
+  def changeable?
+    CHANGEABLE_STATES.include?(state)
   end
 
   def action_details(opts = {}, xml:)
