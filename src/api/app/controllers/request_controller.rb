@@ -242,4 +242,17 @@ class RequestController < ApplicationController
     @req.change_state(params)
     render_ok
   end
+
+  class CommandContext
+    attr_reader :user, :params
+
+    def initialize(user, params)
+      @user = user
+      @params = params
+    end
+  end
+
+  def pundit_user
+    CommandContext.new(User.possibly_nobody, params)
+  end
 end

@@ -21,7 +21,7 @@ class BsRequest < ApplicationRecord
 
   OBSOLETE_STATES = [:declined, :superseded, :revoked].freeze
 
-  CHANGEABLE_STATES = [:new:, :review, :declined]
+  CHANGEABLE_STATES = [:new, :review, :declined]
 
   ACTION_NOTIFY_LIMIT = 50
 
