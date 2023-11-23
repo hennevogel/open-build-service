@@ -12,7 +12,7 @@ class TokenPolicy < ApplicationPolicy
   end
 
   def create?
-    record.owned_by?(user)
+    record.owned_by?(user) || user.is_admin?
   end
 
   def destroy?

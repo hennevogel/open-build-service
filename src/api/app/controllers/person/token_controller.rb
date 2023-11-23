@@ -1,69 +1,65 @@
 require 'xmlhash'
 module Person
   class TokenController < ApplicationController
-    rescue_from ActiveRecord::RecordNotFound, with: :record_not_found
-
-    before_action :set_user
-    before_action :validate_operation, only: [:create]
-    after_action :verify_authorized
+    before_action :set_package, :set_operation, only: :create
+    before_action :set_token, only: :destroy
+    after_action :verify_policy_scoped, only: :index
+    after_action :verify_authorized, only: %i[create delete]
 
     # GET /person/<login>/token
     def index
-      authorize @user, :update?
-
       @list = policy_scope(Token)
     end
 
     # POST /person/<login>/token
     def create
-      authorize @user, :update?
+      @token = Token.token_type(@operation).new(description: params[:description],
+                                                        executor: User.session!,
+                                                        package: @package,
+                                                        scm_token: params[:scm_token])
+      authorize @token
 
-      set_package
-
-      @token = Token.token_type(params[:operation]).create(description: params[:description], executor: @user, package: @package, scm_token: params[:scm_token])
-      return if @token.valid?
-
-      render_error status: 400,
-                   errorcode: 'invalid_token',
-                   message: "Failed to create token: #{@token.errors.full_messages.to_sentence}."
+      if @thing.save
+        render_ok
+      else
+        render_error(status: 400, errorcode: 'invalid_token', message: "Failed to create token: #{@token.errors.full_messages.to_sentence}.")
+      end
     end
 
     # DELETE /person/<login>/token/<id>
-    def delete
-      authorize @user, :update?
+    def destroy
+      authorize @token
 
-      @user.tokens.find(params[:id]).destroy
+      @token.destroy
+
       render_ok
     end
 
     private
 
-    def record_not_found(exception)
-      render_error status: 404, message: "Couldn't find Token with 'id'=#{exception.id}"
-    end
-
-    def set_user
-      @user = User.find_by(login: params[:login]) || User.find_nobody!
+    def set_token
+      @token = User.session!.tokens.find(params[:id])
     end
 
     def set_package
-      @package = nil
-      return unless params[:project] && params[:package]
+      return unless params[:project] || params[:package]
 
-      @package = Package.get_by_project_and_name(params[:project], params[:package])
+      @package = Package.get_by_project_and_name(params[:project], params[:package], follow_multibuild: true)
     end
 
-    def validate_operation
-      operation_param = params[:operation]
-      # TODO: align operation parameter allowed values
-      # - webUI: https://github.com/openSUSE/open-build-service/blob/master/src/api/app/models/token.rb#L27
-      # - API: https://github.com/openSUSE/open-build-service/blob/master/src/api/public/apidocs/paths/person_login_token.yaml#L89
-      return if operation_param.nil? ||
-                %w[runservice rebuild release workflow].include?(operation_param) # possible API parameter values
+    def set_operation
+      @operation = params[:operation] || 'runservice'
+    end
 
-      render_error status: 400,
-                   errorcode: 'invalid_token_type',
-                   message: "'#{operation_param}' is not a valid operation type for a token."
+    def pundit_user
+      displayed_user = User.find_by!(login: params[:login])
+      return displayed_user if User.session!.is_admin?
+
+      if displayed_user != User.session!
+        raise Pundit::NotAuthorizedError, record: displayed_user
+      else
+        User.session!
+      end
     end
   end
 end
