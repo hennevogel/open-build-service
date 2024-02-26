@@ -836,23 +836,13 @@ class SourceController < ApplicationController
 
   # POST /source/<project>/<package>?cmd=undelete
   def package_command_undelete
-    raise PackageExists, "the package exists already #{@target_project_name} #{@target_package_name}" if Package.exists_by_project_and_name(@target_project_name, @target_package_name, follow_project_links: false)
-
     tprj = Project.get_by_name(@target_project_name)
-    raise CmdExecutionNoPermission, "no permission to create package in project #{@target_project_name}" unless tprj.is_a?(Project) && Pundit.policy(User.session!, Package.new(project: tprj)).create?
+    tpkg = tprj.packages.new
+    authorize tpkg, :create?
 
-    path = request.path_info
-    raise CmdExecutionNoPermission, 'Only administrators are allowed to set the time' unless User.admin_session? || params[:time].blank?
+    raise CmdExecutionNoPermission, 'Only administrators are allowed to set the time' if params[:time] && !User.admin_session?
 
-    path += build_query_from_hash(params, %i[cmd user comment time])
-    pass_to_backend(path)
-
-    # read meta data from backend to restore database object
-    prj = Project.find_by_name!(params[:project])
-    pkg = prj.packages.new(name: params[:package])
-    pkg.update_from_xml(Xmlhash.parse(Backend::Api::Sources::Package.meta(params[:project], params[:package])))
-    pkg.store
-    pkg.sources_changed
+    Package.restore(@target_project_name, @target_package_name, comment: params[:comment], time: params[:time])
   end
 
   # FIXME: obsolete this for 3.0

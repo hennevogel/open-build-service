@@ -5,6 +5,10 @@ module Package::Errors
     setup 'cycle_error'
   end
 
+  class ExistsError < APIError
+    setup 'package_exists'
+  end
+
   class DeleteError < APIError
     attr_accessor :packages
 

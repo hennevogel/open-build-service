@@ -258,6 +258,16 @@ class Package < ApplicationRecord
     PackagesFinder.new.find_by_attribute_type_and_value(attrib_type, value, package)
   end
 
+  def self.restore(project_name, package_name, backend_opts = {})
+    project = Project.get_by_name(project_name)
+    raise ExistsError, "the package #{project_name}/#{package_name} exists already" if project.packages.find_by(name: package_name)
+
+    Backend::Api::Sources::Package.undelete(project_name, package_name, backend_opts.compact)
+    package = project.packages.new(name: package_name)
+    package.commit_opts = { no_backend_write: 1 }
+    package.update_from_xml(Xmlhash.parse(package.meta.content))
+  end
+
   def meta
     PackageMetaFile.new(project_name: project.name, package_name: name)
   end
