@@ -1293,6 +1293,21 @@ class Package < ApplicationRecord
     { project: project.name, package: name }
   end
 
+  def copy_from(source_project_name:, source_package_name:, backend_opts: {})
+    if source_package_name.in?(['_project', '_pattern'])
+      errors.add(:copy_from, "#{source_package_name} special packages not allowed")
+      return false
+    end
+
+    source_package_xml = Xmlhash.parse(Backend::Api::Sources::Package.meta(source_project_name, source_package_name))
+    attributes_to_copy = source_package_xml.with_indifferent_access.slice(:title, :description, :bcntsynctag, :releasename, :scmsync, :url)
+    assign_attributes(attributes_to_copy)
+    update_all_flags(source_package_xml)
+
+    Backend::Api::Sources::Package.copy(project.name, name, source_project_name, source_package_name, User.session!.login, backend_opts)
+    save!
+  end
+
   private
 
   def extract_kiwi_element(element)
