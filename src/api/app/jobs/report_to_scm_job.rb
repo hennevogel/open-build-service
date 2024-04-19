@@ -1,6 +1,14 @@
 class ReportToSCMJob < CreateJob
   ALLOWED_EVENTS = ['Event::BuildFail', 'Event::BuildSuccess', 'Event::RequestStatechange'].freeze
 
+  rescue_from Octokit::Error, Gitlab::Error::ResponseError, GiteaAPI::V1::Client::GiteaApiError do |exception|
+    @workflow_run.update(response_body: exception.message, status: 'fail') if @workflow_run&.persisted?
+  end
+
+  rescue_from Gitlab::Error::Parsing do |exception|
+    @workflow_run.update(response_body: 'impossible to parse response body received from Gitlab', status: 'fail') if @workflow_run&.persisted?
+  end
+
   queue_as :scm
 
   def perform(event_id)

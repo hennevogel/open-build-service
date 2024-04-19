@@ -1,6 +1,14 @@
 class GithubStatusReporter
   attr_accessor :state, :initial_report, :event_type
 
+  rescue_from Octokit::Error do |exception|
+    @workflow_run.update(response_body: exception.message, status: 'fail') if @workflow_run&.persisted?
+  end
+
+  rescue_from OpenSSL::SSL::SSLError do |exception|
+    @workflow_run.update(response_body: exception.message, status: 'fail') if @workflow_run&.persisted?
+  end
+
   def initialize(event_payload, event_subscription_payload, scm_token, state, workflow_run = nil, event_type = nil, initial_report: false)
     super(event_payload, event_subscription_payload, scm_token, workflow_run)
 

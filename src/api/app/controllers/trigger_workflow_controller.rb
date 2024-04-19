@@ -31,15 +31,22 @@ class TriggerWorkflowController < ApplicationController
         if validation_errors.none?
           @workflow_run.update(status: 'success', response_body: render_ok)
         else
-          @workflow_run.update_as_failed(render_error(status: 400, message: validation_errors.to_sentence))
+          @workflow_run.update(status: 'fail', response_body: validation_errors.to_sentence)
         end
       end
-    # We always want to return 200 in the request. Because a lot of things in `Workflow`` can go wrong outside this request cycle.
-    # People need to have a look at their `WorkflowRun` to see how `Workflow` went.
-    rescue APIError => e
-      @workflow_run.update_as_failed(render_error(status: e.status, errorcode: e.errorcode, message: e.message))
-    rescue Pundit::NotAuthorizedError => e
-      @workflow_run.update_as_failed(e.message)
+    rescue APIError, Pundit::NotAuthorizedError => e
+      @workflow_run.update(status: 'fail', response_body: e.message)
+      raise e # let RescueHandler/RescueAuthorizationHandler do the rest...
+    rescue Octokit::Error, Gitlab::Error::ResponseError, GiteaAPI::V1::Client::GiteaApiError => e
+      @workflow_run.update(status: 'fail', response_body: e.message)
+      render_error(status: 422, errorcode: e.class.name.underscore.tr('/', '_'), message: e.message)
+    rescue Gitlab::Error::Parsing
+      exception_message = 'impossible to parse response body received from Gitlab'
+      @workflow_run.update(status: 'fail', response_body: exception_message)
+      render_error(status: 422, errorcode: 'gitlab_error_parsing', message: exception_message)
+    rescue OpenSSL::SSL::SSLError => e
+      @workflow_run.update(status: 'fail', response_body: e.message)
+      render_error(status: 422, errorcode: 'scm_openssl_error', message: e.message)
     end
   end
 
@@ -108,12 +115,7 @@ class TriggerWorkflowController < ApplicationController
   def validate_scm_event
     return if @scm_extractor.valid?
 
-    @workflow_run.update_as_failed(
-      render_error(
-        status: 400,
-        errorcode: 'bad_request',
-        message: @scm_extractor.error_message
-      )
-    )
+    @workflow_run.update(status: 'fail', response_body: @scm_extractor.error_message)
+    render_error(status: 400, errorcode: 'bad_request', message: @scm_extractor.error_message)
   end
 end

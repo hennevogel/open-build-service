@@ -48,18 +48,13 @@ class WorkflowRun < ApplicationRecord
     fail: 2
   }
 
-  # Marks the workflow run as failed and records the relevant debug information in response_body
-  def update_as_failed(message)
-    update(response_body: message, status: 'fail')
-  end
-
-  # Stores debug info to help figure out what went wrong when trying to save a Status in the SCM.
+  # Stores debug info to help figure out what went wrong when trying to report status to the SCM.
   # Marks the workflow run as failed also.
   def save_scm_report_failure(message, options)
-    update_as_failed(message)
     scm_status_reports.create(response_body: message,
                               request_parameters: JSON.generate(options.slice(*PERMITTED_OPTIONS)),
                               status: 'fail') # set SCMStatusReport status
+    update(status: 'fail', response_body: message)
   end
 
   # Stores info from a succesful SCM status report. The default value for 'status' is 'success'.

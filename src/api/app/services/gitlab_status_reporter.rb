@@ -1,5 +1,15 @@
 class GitlabStatusReporter
+  include ActiveSupport::Rescuable
+
   attr_accessor :state, :initial_report, :event_type
+
+  rescue_from Gitlab::Error::ResponseError do |exception|
+    @workflow_run.update(response_body: exception.message, status: 'fail') if @workflow_run&.persisted?
+  end
+
+  rescue_from Gitlab::Error::Parsing do |_exception|
+    @workflow_run.update(response_body: 'impossible to parse response body received from Gitlab', status: 'fail') if @workflow_run&.persisted?
+  end
 
   def initialize(event_payload, event_subscription_payload, scm_token, state, workflow_run = nil, event_type = nil, initial_report: false)
     super(event_payload, event_subscription_payload, scm_token, workflow_run)
