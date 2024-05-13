@@ -3,6 +3,7 @@
 # to users in the web UI for beta features.
 ENABLED_FEATURE_TOGGLES = [
   { name: :request_show_redesign, description: 'Redesign of the request pages to improve the collaboration workflow' },
+  { name: :tasks_page_redesign, description: 'Redesign of the tasks page to improve the user experience' },
   { name: :content_moderation, description: 'Reporting inappropriate content' },
   { name: :color_themes, description: 'Color themes' }
 ].freeze
