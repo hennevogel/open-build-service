@@ -1,0 +1,110 @@
+.row
+  .col-md-4.col-lg-3.px-0.px-md-3.sticky-top#workflow-runs-filter-desktop
+    .card.mb-3
+      %strong.d-block.d-md-none.p-3{ data: { 'bs-toggle': 'collapse', 'bs-target': '#filters' },
+                                  aria: { expanded: true, controls: 'filters' } }
+        Filtered by: #{params[:status]&.humanize}
+        %i.float-end.mt-1.fa.fa-chevron-down#workflow-runs-dropdown-trigger
+      .collapse#filters
+      .collapse#filters
+        = form_with(url: my_tasks_path, method: :get) do |form|
+          .list-group.list-group-flush.mt-3.mb-2
+            %h6.px-3.py-2
+              %b Direction
+            .px-4.py-1
+              = render partial: 'webui/shared/check_box', locals: { label: 'Incoming',
+                                                                    amount: 5,
+                                                                    key: 'incoming',
+                                                                    label_icon: 'fas fa-inbox',
+                                                                    checked: params[:incoming].present?}
+            .px-4.py-1
+              = render partial: 'webui/shared/check_box', locals: { label: 'Outgoing',
+                                                                    amount: 5,
+                                                                    key: 'outgoing',
+                                                                    label_icon: 'fas fa-arrow-up-from-bracket',
+                                                                    checked: params[:outgoing].present?}
+          .list-group.list-group-flush.mt-3.mb-2
+            %h6.px-3.py-2
+              %b State
+            .px-4.py-1
+              = render partial: 'webui/shared/check_box', locals: { label: 'Accepted',
+                                                                    amount: 5,
+                                                                    key: 'accepted',
+                                                                    label_icon: 'fas fa-check',
+                                                                    checked: params[:accepted].present?}
+            .px-4.py-1
+              = render partial: 'webui/shared/check_box', locals: { label: 'Declined',
+                                                                    amount: 5,
+                                                                    key: 'declined',
+                                                                    label_icon: 'fas fa-xmark',
+                                                                    checked: params[:declined].present?}
+            .px-4.py-1
+              = render partial: 'webui/shared/check_box', locals: { label: 'New',
+                                                                    amount: 5,
+                                                                    key: 'new',
+                                                                    label_icon: 'fas fa-code-commit',
+                                                                    checked: params[:new].present?}
+            .px-4.py-1
+              = render partial: 'webui/shared/check_box', locals: { label: 'In Review',
+                                                                    amount: 5,
+                                                                    key: 'review',
+                                                                    label_icon: 'fas fa-person-circle-check',
+                                                                    checked: params[:review].present?}                                                                                                                             
+            .px-4.py-1
+              = render partial: 'webui/shared/check_box', locals: { label: 'Revoked',
+                                                                    amount: 5,
+                                                                    key: 'revoked',
+                                                                    label_icon: 'fas fa-triangle-exclamation',
+                                                                    checked: params[:revoked].present?}  
+            .px-4.py-1
+              = render partial: 'webui/shared/check_box', locals: { label: 'Superseded',
+                                                                    amount: 5,
+                                                                    key: 'superseded',
+                                                                    label_icon: 'fas fa-code-branch',
+                                                                    checked: params[:superseded].present?}  
+          .list-group.list-group-flush.mt-3.mb-2
+            %h6.px-3.py-2
+              %b Source / Target
+            .px-4.py-1
+              = render partial: 'webui/shared/input', locals: { label: 'Source',
+                                                                filter_item: 'source',
+                                                                placeholder: 'home:hans/vim',
+                                                                selected_input_value: params[:superseded] }
+            .px-4.py-1
+              = render partial: 'webui/shared/input', locals: { label: 'Target',
+                                                                filter_item: 'target',
+                                                                placeholder: 'home:hans/vim',
+                                                                selected_input_value: params[:superseded] }
+          .list-group.list-group-flush.mt-3.mb-2
+            %h6.px-3.py-2
+              %b Involved People
+            .px-4.py-1
+              = render partial: 'webui/shared/input', locals: { label: 'Reviewer',
+                                                                filter_item: 'reviewer',
+                                                                placeholder: 'username',
+                                                                selected_input_value: params[:reviewer] }
+            .px-4.py-1
+              = render partial: 'webui/shared/input', locals: { label: 'Submitter',
+                                                                filter_item: 'submitter',
+                                                                placeholder: 'username',
+                                                                selected_input_value: params[:superseded] }
+          .text-center.mt-4.mb-4
+            = link_to('Clear', my_tasks_path, class: 'btn btn-light border')
+            %button.btn.btn-info#filter-button{ type: :submit }
+              Apply
+  .col-md-8.col-lg-9.px-0.px-md-3#tasks-list
+    .card
+      .card-body
+        - if @requests.blank?
+          .text-center
+            %p There are no requests available
+        - else
+          .text-center
+            %span.ms-3= page_entries_info(@requests)
+          .pt-3#requests
+            - @requests.each do |request|
+              .border-bottom.py-2{ id: "request-heading#{request.id}" }
+                .mb-0
+                  .row
+                    = request.inspect
+            = paginate @reqeusts, views_prefix: 'webui'

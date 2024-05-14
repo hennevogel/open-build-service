@@ -6,6 +6,14 @@ module Webui
       before_action -> { authorize(%i[users task]) }
 
       after_action :verify_authorized
+
+      def index
+        if Flipper.enabled?(:tasks_page_redesign, User.session)
+
+          @requests = nil
+          render :index_beta
+        end
+      end
     end
   end
 end
