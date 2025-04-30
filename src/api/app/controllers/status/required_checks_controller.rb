@@ -66,14 +66,6 @@ class Status::RequiredChecksController < ApplicationController
 
   private
 
-  def set_project
-    @project = Project.get_by_name(params[:project_name])
-
-    return if @project
-
-    render_error status: 404, message: "Project '#{params[:project_name]}' not found."
-  end
-
   def set_checkable
     @checkable = checkable
   end

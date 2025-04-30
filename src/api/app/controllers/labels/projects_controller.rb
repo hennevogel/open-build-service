@@ -38,10 +38,6 @@ class Labels::ProjectsController < ApplicationController
 
   private
 
-  def set_project
-    @project = Project.get_by_name(params[:project_name])
-  end
-
   def set_label
     @label = LabelGlobal.find(params[:id])
   end

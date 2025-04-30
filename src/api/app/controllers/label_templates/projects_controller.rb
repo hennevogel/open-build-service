@@ -46,10 +46,6 @@ class LabelTemplates::ProjectsController < ApplicationController
 
   private
 
-  def set_project
-    @project = Project.get_by_name(params[:project_name])
-  end
-
   def set_label_template
     @label_template = LabelTemplate.find(params[:id])
   end

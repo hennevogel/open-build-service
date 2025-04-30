@@ -251,6 +251,11 @@ class ApplicationController < ActionController::Base
 
   private
 
+  def set_project
+    project_name = params[:project] || params[:project_name] || params[:staging_workflow_project]
+    @project = Project.get_by_name(project_name)
+  end
+
   def shutup_rails
     Rails.cache.silence! unless Rails.env.development?
   end
