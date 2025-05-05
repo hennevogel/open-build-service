@@ -256,6 +256,15 @@ class ApplicationController < ActionController::Base
     @project = Project.get_by_name(project_name)
   end
 
+  def set_package
+    @package = Package.get_by_project_and_name(params[:project],
+                                               params[:package],
+                                               use_source: false,
+                                               follow_project_scmsync_links: true,
+                                               follow_project_remote_links: true,
+                                               follow_multibuild: true)
+  end
+
   def shutup_rails
     Rails.cache.silence! unless Rails.env.development?
   end

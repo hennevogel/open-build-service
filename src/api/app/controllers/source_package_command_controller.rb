@@ -1,6 +1,8 @@
 require 'builder/xchar'
 
 class SourcePackageCommandController < SourceController
+  include ProjectUserContext
+
   SOURCE_UNTOUCHED_COMMANDS = %w[branch diff linkdiff servicediff showlinked rebuild wipe
                                  waitservice remove_flag set_flag getprojectservices fork].freeze
   # list of cammands which create the target package
@@ -15,13 +17,16 @@ class SourcePackageCommandController < SourceController
   skip_before_action :validate_params, only: %i[diff linkdiff servicediff]
 
   before_action :require_package # FIXME: This is actually setting @deleted_package, @target_project_name and @target_package_name
+  before_action :set_project, only: :showlinked
+  before_action :set_package, only: :showlinked
+  before_action :authorize, only: :showlinked
   before_action :set_user_param
   before_action :set_origin_package
   before_action :validate_target_project_name
   before_action :validate_target_package_name
   before_action :validate_project_name
   before_action :validate_package_name
-  before_action :authorize
+  after_action :verify_authorized
 
   # POST /source/<project>/<package>?cmd=updatepatchinfo
   def updatepatchinfo
@@ -94,6 +99,8 @@ class SourcePackageCommandController < SourceController
   # create a id collection of all packages doing a package source link to this one
   # POST /source/<project>/<package>?cmd=showlinked
   def showlinked
+    authorize @package, policy_class: PackageCmdPolicy
+
     if @package
       render 'source/package_command_showlinked', formats: [:xml]
     else
@@ -458,18 +465,6 @@ class SourcePackageCommandController < SourceController
     @origin_package = Package.get_by_project_and_name(params[:oproject], params[:opackage])
   end
 
-  def authorize
-    return if PACKAGE_CREATING_COMMANDS.include?(params[:cmd]) && !Project.exists_by_name(@target_project_name)
-
-    # even when we can create the package, an existing instance must be checked if permissions are right
-    @project = Project.get_by_name(@target_project_name)
-    if (PACKAGE_CREATING_COMMANDS.exclude?(params[:cmd]) || Package.exists_by_project_and_name(@target_project_name, @target_package_name, follow_project_links: SOURCE_UNTOUCHED_COMMANDS.include?(params[:cmd]))) &&
-       (@project.is_a?(String) || @project.scmsync.blank? || SCM_SYNC_PROJECT_COMMANDS.exclude?(params[:cmd]))
-      # is a local project, which is not scm managed. Or using a command not supported for scm projects.
-      validate_target_for_package_command_exists!
-    end
-  end
-
   def verify_can_modify_target!
     # we require a target, but are we allowed to modify the existing target ?
     if Project.exists_by_name(@target_project_name)
@@ -556,5 +551,9 @@ class SourcePackageCommandController < SourceController
 
     # check read access rights when the package does not exist anymore
     validate_read_access_of_deleted_package(@target_project_name, @target_package_name) if @package.nil? && @deleted_package
+  end
+
+  def pundit_user
+    UserContext.new(User.session!, @project)
   end
 end
