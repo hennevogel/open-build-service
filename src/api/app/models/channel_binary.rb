@@ -8,7 +8,10 @@ class ChannelBinary < ApplicationRecord
   validates :superseded_by, length: { maximum: 255 }
 
   validate do |channel_binary|
-    errors.add(:base, :invalid, message: 'Associated project has to match with repository.project') if channel_binary.project && channel_binary.repository && !(channel_binary.repository.project == channel_binary.project)
+    if channel_binary.project && channel_binary.repository && channel_binary.repository.project != channel_binary.project
+      errors.add(:base, :invalid,
+                 message: 'Associated project has to match with repository.project')
+    end
   end
 
   def self._sync_keys
@@ -22,7 +25,7 @@ class ChannelBinary < ApplicationRecord
     maintained_projects = Project.get_maintenance_project!.expand_maintained_projects
 
     # gsub(/\s+/, "") makes sure there are no additional newlines and whitespaces
-    query = <<-SQL.squish.gsub(/\s+/, ' ')
+    query = <<~SQL.squish.gsub(/\s+/, ' ')
       SELECT channel_binaries.* FROM channel_binaries
         LEFT JOIN channel_binary_lists ON channel_binary_lists.id = channel_binaries.channel_binary_list_id
           LEFT JOIN channels ON channel_binary_lists.channel_id = channels.id

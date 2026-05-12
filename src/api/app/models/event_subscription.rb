@@ -19,11 +19,14 @@ class EventSubscription < ApplicationRecord
     moderator: 'As a moderator',
     token_executor: 'User who runs the workflow',
     token_member: 'User the token is shared with',
+    updated_token_member: 'User or group member',
     reporter: 'As a reporter of the content',
     offender: 'As the creator of the content',
     member: 'Member',
     assignee: 'Assignee',
-    group_maintainer: 'Mantainer of the group'
+    group_maintainer: 'Maintainer of the group',
+    develpackage_or_package_maintainer: 'Maintainer of the develpackage or the package',
+    admin_moderator_or_staff: 'User with the Admin, Staff or Moderator role'
   }.freeze
 
   enum :channel, {
@@ -51,7 +54,8 @@ class EventSubscription < ApplicationRecord
            reviewer commenter creator
            project_watcher source_project_watcher target_project_watcher
            package_watcher target_package_watcher source_package_watcher request_watcher any_role
-           moderator reporter offender token_executor token_member member assignee group_maintainer]
+           moderator reporter offender token_executor token_member member assignee group_maintainer
+           develpackage_or_package_maintainer admin_moderator_or_staff updated_token_member]
   }
 
   scope :for_eventtype, ->(eventtype) { where(eventtype: eventtype) }
@@ -119,7 +123,6 @@ end
 #  channel         :integer          default("disabled"), not null
 #  enabled         :boolean          default(FALSE)
 #  eventtype       :string(255)      not null
-#  payload         :text(65535)
 #  receiver_role   :string(255)      not null
 #  created_at      :datetime
 #  updated_at      :datetime

@@ -1,5 +1,5 @@
 class Comment < ApplicationRecord
-  belongs_to :commentable, polymorphic: true # belongs to a Project, Package, BsRequest or BsRequestActionSubmit
+  belongs_to :commentable, polymorphic: true, counter_cache: true # belongs to a Project, Package, BsRequest or BsRequestActionSubmit
   belongs_to :user, inverse_of: :comments
   belongs_to :moderator, class_name: 'User', optional: true
 
@@ -34,7 +34,6 @@ class Comment < ApplicationRecord
 
   scope :on_actions_for_request, ->(bs_request) { where(commentable: BsRequestAction.where(bs_request: bs_request)) }
   scope :without_parent, -> { where(parent_id: nil) }
-  scope :newest_first, -> { order(created_at: :desc) }
 
   def to_s
     body

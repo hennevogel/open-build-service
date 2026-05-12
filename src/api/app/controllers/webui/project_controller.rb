@@ -27,18 +27,34 @@ class Webui::ProjectController < Webui::WebuiController
   before_action :check_ajax, only: %i[buildresult edit_comment_form]
 
   after_action :verify_authorized, except: %i[index autocomplete_projects autocomplete_staging_projects
-                                              autocomplete_incidents autocomplete_packages
+                                              autocomplete_incidents autocomplete_packages autocomplete_anitya_distributions
                                               autocomplete_repositories users subprojects new show
                                               buildresult requests monitor new_release_request
                                               remove_target_request edit_comment edit_comment_form preview_description]
 
   def index
+    @projects = if show_all?
+                  Project.left_joins(label_globals: [:label_template_global])
+                         .includes(label_globals: [:label_template_global])
+                         .references(:label_globals, :label_template_global).distinct
+                else
+                  Project.left_joins(label_globals: [:label_template_global])
+                         .includes(label_globals: [:label_template_global])
+                         .references(:label_globals, :label_template_global).filtered_for_list.distinct
+                end
+
+    if Flipper.enabled?(:labels, User.session)
+      @label_global_templates = @projects.flat_map do |project|
+        project.label_globals.map(&:label_template_global)
+      end.compact.uniq
+    end
+
     respond_to do |format|
       format.html do
         render :index,
                locals: { important_projects: Project.very_important_projects_with_categories }
       end
-      format.json { render json: ProjectDatatable.new(params, view_context: view_context, show_all: show_all?) }
+      format.json { render json: ProjectDatatable.new(params, view_context: view_context, projects: @projects) }
     end
   end
 
@@ -159,13 +175,21 @@ class Webui::ProjectController < Webui::WebuiController
     render json: @project.repositories.order(:name).pluck(:name)
   end
 
+  def autocomplete_anitya_distributions
+    search_term = params[:term].downcase
+    results = Project.values_for_anitya_distributions.compact.select do |dist|
+      dist.downcase.include?(search_term)
+    end
+    render json: results
+  end
+
   def users
     @users = @project.users
     @groups = @project.groups
     @roles = Role.local_roles
     if User.session && params[:notification_id]
       @current_notification = Notification.find(params[:notification_id])
-      authorize @current_notification, :update?, policy_class: NotificationCommentPolicy
+      authorize @current_notification, :update?, policy_class: NotificationPolicy
     end
     @current_request_action = BsRequestAction.find(params[:request_action_id]) if User.session && params[:request_action_id]
   end

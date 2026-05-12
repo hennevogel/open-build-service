@@ -1185,6 +1185,8 @@ sub getfollowupsources {
   my $server = $buildinfo->{'reposerver'};
   my $res = getjobdata($buildinfo, $dir);
   die("no old sources in followup job\n") unless @$res;
+  $buildinfo->{'followup_slsa_provenance'} = readstr("$dir/_slsa_provenance.json", 1);
+  $buildinfo->{'followup_slsa_provenance_config'} = readstr("$dir/_slsa_provenance.config", 1);
   # need to get buildenv from old sources ;(
   $server = $buildinfo->{'srcserver'} || $srcserver;
   $res = BSRPC::rpc({
@@ -1240,19 +1242,16 @@ sub getmodulemddata {
 sub getpubkey {
   my ($buildinfo, $dir, $signtype) = @_;
   my $server = $buildinfo->{'srcserver'} || $srcserver;
-  my @args = ("project=$buildinfo->{'project'}", "withpubkey=1");
+  my @args = ("project=$buildinfo->{'project'}");
   push @args, "signtype=$signtype" if $signtype;
   push @args, "signflavor=$buildinfo->{'signflavor'}" if $buildinfo->{'signflavor'};
-  my $signkey;
-  my $pubkey;
-  eval {
-    $signkey = BSRPC::rpc({
-      'uri' => "$server/getsignkey",
+  my $pubkey = eval {
+    BSRPC::rpc({
+      'uri' => "$server/getpubkey",
       'timeout' => $gettimeout,
     }, undef, @args);
   };
-  die("could not retrieve build key: $@\n") if $@;
-  ($signkey, $pubkey) = split("\n", $signkey, 2);
+  die("could not retrieve pubkey: $@\n") if $@;
   die("unusable pubkey\n") unless $pubkey && length($pubkey) > 10;
   writestr("$dir/_pubkey", undef, $pubkey);
 }
@@ -3807,9 +3806,13 @@ sub dobuild {
   my $stats = {};
   my $deltamode = $buildinfo->{'file'} eq '_delta' ? 1 : undef;
   my $ptfmode = $buildinfo->{'file'} eq '_ptf' ? 1 : undef;
+  my $reproduciblecheckmode = $buildinfo->{'file'} eq '_reproduciblecheck' ? 1 : undef;
   my $followupmode = $buildinfo->{'followupfile'};
   my $followupcopy = {};
   my $needsobspackage;
+
+  # hack to enable logfile appending
+  $followupmode = $buildinfo->{'followupfile'} = $buildinfo->{'file'} if $reproduciblecheckmode;
 
   my $helper = '';
   /^\Q$helperarch\E:(.*)$/ && ($helper = $1) for @{$BSCando::cando{$hostarch}};
@@ -3839,7 +3842,7 @@ sub dobuild {
   rm_rf($oldpkgdir) if -d $oldpkgdir;
 
   # create buildenv data
-  if (!$imagemode && !$followupmode && !$deltamode && !$ptfmode) {
+  if (!$imagemode && !$followupmode && !$deltamode && !$ptfmode && !$reproduciblecheckmode) {
     $buildinfo->{'outbuildinfo'} = {
       'project' => $projid,
       'package' => $packid,
@@ -3874,12 +3877,12 @@ sub dobuild {
       writestr("$srcdir/deltagen.spec", undef, $spec);
     }
     $buildinfo->{'file'} = 'deltagen.spec';
-  } elsif ($ptfmode) {
+  } elsif ($ptfmode || $reproduciblecheckmode) {
     getjobdata($buildinfo, $srcdir);
     print "packages, ";
     getbinaries($buildinfo, $pkgdir, $srcdir, $preinstallimagedata);
     undef $oldpkgdir;
-    $buildinfo->{'file'} = 'ptf.spec';
+    $buildinfo->{'file'} = $ptfmode ? 'ptf.spec' : 'reproduciblecheck.spec';
     @meta = split("\n", readstr("$srcdir/meta"));
   } elsif ($followupmode) {
     getfollowupsources($buildinfo, $srcdir);
@@ -3962,7 +3965,9 @@ sub dobuild {
   if (defined $buildinfo->{'config'}) {
     $config = $buildinfo->{'config'};
   } else {
-    $config = BSRPC::rpc("$server/getconfig", undef, "project=$projid", "repository=$repoid", @configpath);
+    my $configrepoid = $repoid;
+    $configrepoid = $buildinfo->{'reprorepoid'} if $buildinfo->{'reprorepoid'} && !$reproduciblecheckmode;
+    $config = BSRPC::rpc("$server/getconfig", undef, "project=$projid", "repository=$configrepoid", @configpath);
     $config = Build::combine_configs($config, "Macros:\n$buildinfo->{'modularity_macros'}") if $buildinfo->{'modularity_macros'};
   }
   $buildinfo->{'slsa_provenance_config'} = $config if $buildinfo->{'slsaprovenance'};
@@ -4021,6 +4026,9 @@ sub dobuild {
 
   $buildinfo->{'provenance_disturl'} = $disturl if $disturl;
   $buildinfo->{'provenance_vcs'} = $vcs if $vcs;
+
+  my $njobs = $jobs;
+  $njobs = $bconf->{'buildflags:maxjobs'} if $njobs && $bconf->{'buildflags:maxjobs'} && $bconf->{'buildflags:maxjobs'} < $njobs;
 
   my @args;
   push @args, $helper if $helper;
@@ -4130,7 +4138,7 @@ sub dobuild {
   push @args, '--release', "$release" if defined $release;
   push @args, '--debug' if $buildinfo->{'debuginfo'};
   push @args, '--arch', $arch;
-  push @args, '--jobs', $jobs if $jobs;
+  push @args, '--jobs', $njobs if $njobs;
   push @args, '--ccache' if $useccache && $oldpkgdir;
   push @args, '--ccache-create-archive' if $useccache && $oldpkgdir;
   push @args, "--ccache-type=$ccachetype" if $useccache && $oldpkgdir && $ccachetype;
@@ -4220,7 +4228,7 @@ sub dobuild {
       'endtime' => $now,
     };
     $info->{'workerid'} = $workerid if defined $workerid;
-    for (qw{readytime srcmd5 verifymd5 rev vcs file buildtype}) {
+    for (qw{readytime srcmd5 verifymd5 rev vcs file buildtype jobid}) {
       $info->{$_} = $buildinfo->{$_} if $buildinfo->{$_};
     }
     $stats->{'info'} = $info;
@@ -4714,6 +4722,7 @@ sub periodic {
 	$kill_job = "kvm spinnlock bug" if $tail =~ /INFO: rcu_sched self-detected stall on CPU/;
 # leads to false positive on i586 kernels
 #	$kill_job = "xen soft lockup" if $tail =~ /BUG: soft lockup - CPU#\d+ stuck for/;
+	$kill_job = "kvm soft lockup" if $tail =~ /BUG: soft lockup - CPU#\d+ stuck for (\d+)s/ && $1 > 1800;
 	$kill_job = "stuck in SLOF" if $tail =~ /\( \d+ \) Data Storage Exception/;
 	if ($kill_job) {
 	  next unless $locked;
@@ -5000,7 +5009,10 @@ if ($ex == 0) {
   @send = grep {$_->{'name'} !~ /slsa_provenance.(?:json|config)$/} @send;
   if ($buildinfo->{'slsaprovenance'}) {
     my $slsa_provenance;
-    if (($buildinfo->{'slsa_provenance_version'} || '') eq 'v1') {
+    if ($buildinfo->{'followupfile'} && $buildinfo->{'followup_slsa_provenance'}) {
+      $slsa_provenance = $buildinfo->{'followup_slsa_provenance'};
+      $buildinfo->{'slsa_provenance_config'} = $buildinfo->{'followup_slsa_provenance_config'} if $buildinfo->{'followup_slsa_provenance_config'};
+    } elsif (($buildinfo->{'slsa_provenance_version'} || '') eq 'v1') {
       $slsa_provenance = generate_slsa_provenance_statement_v1($buildinfo, \@send);
     } else {
       $slsa_provenance = generate_slsa_provenance_statement_v02($buildinfo, \@send);

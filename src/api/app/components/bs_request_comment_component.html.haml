@@ -36,7 +36,7 @@
           - if show_username
             = link_to(helpers.realname_with_login(comment.user), user_path(comment.user))
             commented
-          = link_to(helpers.commentable_path(comment: comment),
+          = link_to(helpers.commentable_path(comment: comment, in_changes: !diff.present?),
                     name: "comment-#{comment.id}",
                     title: l(comment.created_at.utc)) do
             = render TimeComponent.new(time: comment.created_at)
@@ -57,7 +57,7 @@
                 = render(DiffSubjectComponent.new(state: diff['state'], file_info: diff))
               - if comment.outdated?
                 %span.badge.text-bg-warning Outdated
-            = render(DiffComponent.new(diff: diff.dig('diff', '_content'), range:))
+            = render(DiffComponent.new(diff: diff.dig('diff', '_content'), range:, highlighted_lines: [comment.diff_line_number]))
           - else
             %p.border-bottom.fst-italic.px-3.pt-3.pb-2
               The following comment was attached to a line that is outdated.

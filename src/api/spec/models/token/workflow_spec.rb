@@ -1,8 +1,8 @@
 RSpec.describe Token::Workflow do
-  describe '#call' do
-    let(:token_user) { create(:confirmed_user, :with_home, login: 'Iggy') }
-    let(:workflow_token) { create(:workflow_token, executor: token_user) }
+  let(:token_user) { create(:confirmed_user, :with_home, login: 'Iggy') }
+  let(:workflow_token) { create(:workflow_token, executor: token_user) }
 
+  describe '#call' do
     context 'with wrong SCM token' do
       let(:yaml_downloader) { instance_double(Workflows::YAMLDownloader) }
       let(:workflow_run) { create(:workflow_run, token: workflow_token, response_url: 'https://example.com') }
@@ -35,7 +35,7 @@ RSpec.describe Token::Workflow do
       let(:yaml_to_workflows_service) { Workflows::YAMLToWorkflowsService.new(yaml_file: yaml_file, token: workflow_token, workflow_run: workflow_run) }
       let(:workflow) do
         Workflow.new(workflow_run: workflow_run, token: workflow_token,
-                     workflow_instructions: { steps: [branch_package: { source_project: 'home:Admin', source_package: 'ctris', target_project: 'dev:tools' }] })
+                     workflow_instructions: { steps: [{ branch_package: { source_project: 'home:Admin', source_package: 'ctris', target_project: 'dev:tools' } }] })
       end
       let(:workflows) { [workflow] }
 
@@ -105,7 +105,7 @@ RSpec.describe Token::Workflow do
       let(:request_payload) { { sender: { url: 'https://api.github.com' } }.to_json }
       let(:workflow) do
         Workflow.new(token: workflow_token, workflow_run: workflow_run,
-                     workflow_instructions: { steps: [branch_package: { source_project: 'home:Admin', source_package: 'ctris', target_project: 'dev:tools' }] })
+                     workflow_instructions: { steps: [{ branch_package: { source_project: 'home:Admin', source_package: 'ctris', target_project: 'dev:tools' } }] })
       end
       let(:workflows) { [workflow] }
 
@@ -190,7 +190,7 @@ RSpec.describe Token::Workflow do
       let(:yaml_to_workflows_service) { Workflows::YAMLToWorkflowsService.new(yaml_file: yaml_file, token: workflow_token, workflow_run: workflow_run) }
       let(:workflow) do
         Workflow.new(token: workflow_token, workflow_run: workflow_run,
-                     workflow_instructions: { steps: [branch_package: { source_project: 'home:Admin', source_package: 'ctris', target_project: 'dev:tools' }] })
+                     workflow_instructions: { steps: [{ branch_package: { source_project: 'home:Admin', source_package: 'ctris', target_project: 'dev:tools' } }] })
       end
       let(:workflows) { [workflow] }
       let(:octokit_client) { instance_double(Octokit::Client) }
@@ -229,7 +229,7 @@ RSpec.describe Token::Workflow do
       let(:yaml_to_workflows_service) { Workflows::YAMLToWorkflowsService.new(yaml_file: yaml_file, token: workflow_token, workflow_run: workflow_run) }
       let(:workflow) do
         Workflow.new(token: workflow_token, workflow_run: workflow_run,
-                     workflow_instructions: { steps: [branch_package: { source_project: 'home:Admin', source_package: 'ctris', target_project: 'dev:tools' }] })
+                     workflow_instructions: { steps: [{ branch_package: { source_project: 'home:Admin', source_package: 'ctris', target_project: 'dev:tools' } }] })
       end
       let(:workflows) { [workflow] }
       let(:octokit_client) { instance_double(Octokit::Client) }
@@ -249,6 +249,26 @@ RSpec.describe Token::Workflow do
 
       it 'returns no validation errors' do
         expect { subject }.not_to(change(SCMStatusReport, :count))
+      end
+    end
+  end
+
+  describe 'token sharing' do
+    let(:other_user) { create(:confirmed_user, :with_home, login: 'Peter') }
+
+    context 'share with user' do
+      it 'creates an event' do
+        expect { workflow_token.users << other_user }.to change(Event::TokenMembershipUpdate, :count).by(1)
+      end
+    end
+
+    context 'unshare user' do
+      before do
+        workflow_token.users << other_user
+      end
+
+      it 'creates an event' do
+        expect { workflow_token.users.delete(other_user) }.to change(Event::TokenMembershipUpdate, :count).by(1)
       end
     end
   end

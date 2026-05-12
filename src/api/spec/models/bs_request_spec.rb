@@ -25,7 +25,7 @@ RSpec.describe BsRequest, :vcr do
       bs_request_action.update_attribute(:sourceupdate, 'foo')
       # rubocop:enable Rails/SkipsModelValidations
       expect { bs_request.reload.save! }.to raise_error(
-        ActiveRecord::RecordInvalid, 'Validation failed: Bs request actions Sourceupdate is not included in the list'
+        ActiveRecord::RecordInvalid, 'Validation failed: Bs request actions Sourceupdate is not included in the list and Sourceupdate must be blank'
       )
     end
   end
@@ -716,6 +716,73 @@ RSpec.describe BsRequest, :vcr do
       it 'sets the value for diff_not_cached' do
         action_details = request.send(:action_details, opts, xml: request.bs_request_actions.last)
         expect(action_details[:diff_not_cached]).to be(false)
+      end
+    end
+  end
+
+  describe '#source_package_latest_local_version' do
+    context 'when the request has multiple actions' do
+      before do
+        submit_request.bs_request_actions << create(:bs_request_action_maintenance_release, source_project: source_project.name,
+                                                                                            source_package: source_package.name,
+                                                                                            target_project: target_project.name)
+      end
+
+      it 'returns nil' do
+        expect(submit_request.source_package_latest_local_version).to be_nil
+      end
+    end
+
+    context 'when the action is not a submit action' do
+      it 'returns nil' do
+        expect(delete_request.source_package_latest_local_version).to be_nil
+      end
+    end
+
+    context 'when the action is a submit action' do
+      context 'when the source project does not have an anitya distribution name' do
+        it 'returns nil' do
+          expect(submit_request.source_package_latest_local_version).to be_nil
+        end
+      end
+
+      context 'when the source project has an anitya distribution name' do
+        before do
+          source_project.update_column(:anitya_distribution_name, 'openSUSE') # rubocop:disable Rails/SkipsModelValidations
+        end
+
+        context 'when the source package has no latest local version' do
+          it 'returns nil' do
+            expect(submit_request.source_package_latest_local_version).to be_nil
+          end
+        end
+
+        context 'when the source package has a latest local version' do
+          let!(:local_version) { create(:package_version_local, version: '1.0.0', package: source_package) }
+
+          it 'returns the version' do
+            expect(submit_request.source_package_latest_local_version).to eq('1.0.0')
+          end
+        end
+      end
+    end
+  end
+
+  # Only test the happy path as the implementation is identical to #source_package_latest_local_version which is fully tested above.
+  describe '#target_package_latest_local_version' do
+    context 'when the action is a submit action' do
+      context 'when the target project has an anitya distribution name' do
+        before do
+          target_project.update_column(:anitya_distribution_name, 'openSUSE') # rubocop:disable Rails/SkipsModelValidations
+        end
+
+        context 'when the target package has a latest local version' do
+          let!(:local_version) { create(:package_version_local, version: '2.5.1', package: target_package) }
+
+          it 'returns the version' do
+            expect(submit_request.target_package_latest_local_version).to eq('2.5.1')
+          end
+        end
       end
     end
   end

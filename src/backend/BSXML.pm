@@ -379,6 +379,7 @@ our $projpack = [
 		@flags,
 		'bcntsynctag',
 		'hasbuildenv',
+		'hasbigdep',
 	 ]],
 	    'missingpackages',
      ]],
@@ -676,6 +677,9 @@ our $buildinfo = [
 
 	'signflavor',   	# internal
 
+	'reprorepoid',   	# internal
+	'reprojobid',   	# internal
+
       [ 'preinstallimage' =>
 	    'project',
 	    'repository',
@@ -727,7 +731,8 @@ our $buildstatus = [
 	'status',	# obsolete, now code
 	'error',	# obsolete, now details
 	'dirty',	# marked for re-scheduling
-	'versrel',	# for withversrel result call
+	'versrel',	# for versrel result call
+	'reproduciblecheck',	# for reproduciblecheck result call
 	[],
 	'details',
 
@@ -1164,6 +1169,7 @@ our $buildresultinfo = [
 	'readytime',
 	'starttime',
 	'endtime',
+	'jobid',	# for repro builds
 ];
 
 our $result = [
@@ -1323,6 +1329,7 @@ our $binary_id = [
 	'baseproject',
 	'type',
 	'downloadurl',
+	'scmsyncurl',
 ];
 
 our $pattern_id = [

@@ -18,7 +18,14 @@ class SourcePackageController < SourceController
       @tpkg = Package.get_by_project_and_name(@target_project_name, @target_package_name)
     end
 
-    show_package_issues && return if params[:view] == 'issues'
+    case params[:view]
+    when 'issues'
+      show_package_issues
+      return
+    when 'versions'
+      show_package_versions
+      return
+    end
 
     path = request.path_info
     path += build_query_from_hash(params, %i[rev linkrev emptylink
@@ -148,6 +155,12 @@ class SourcePackageController < SourceController
     render partial: 'package_issues'
   end
 
+  def show_package_versions
+    raise NoLocalPackage, 'Versions can only be shown for local packages' unless @tpkg
+
+    render partial: 'package_versions', formats: [:xml]
+  end
+
   def check_permissions_for_file
     @project_name = params[:project]
     @package_name = params[:package]
@@ -168,7 +181,7 @@ class SourcePackageController < SourceController
       raise WrongRouteForStagingWorkflow if @file == '_staging_workflow' && @package_name == '_project'
     else
       # we need a local package here in any case for modifications
-      @pack = Package.get_by_project_and_name(@project_name, @package_name)
+      @pack = Package.get_by_project_and_name(@project_name, @package_name, follow_project_links: false)
       # no modification or deletion of scmsynced projects and packages allowed
       check_for_scmsynced_package_and_project(project: @prj, package: @pack)
       @allowed = permissions.package_change?(@pack)

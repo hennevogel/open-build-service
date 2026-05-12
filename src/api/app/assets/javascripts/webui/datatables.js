@@ -8,7 +8,7 @@
 //= require datatables/extensions/FixedColumns/dataTables.fixedColumns
 
 var DEFAULT_DT_PARAMS = {
-  language: { 
+  language: {
     search: '', searchPlaceholder: "Search...",
     zeroRecords: "Nothing found",
     infoEmpty: "No records available",
@@ -45,9 +45,10 @@ function initializeRemoteDatatable(cssSelector, params) {
   $(cssSelector).dataTable(newParams);
 }
 
-function labelFiltering() {
-  var table = $('#packages-table').DataTable();
+function labelFiltering(tableId) {
+  var table = $(tableId).DataTable();
   var labelColumn = table.column('labels:name');
+  var labelClear = $('#label-clear');
   var labelFilter = $('#label-filter');
   var labelFilterBadge = $('#label-filter .badge');
   $('.obs-dataTable').parent().on('click', '.label-filter', function(e) {
@@ -56,7 +57,7 @@ function labelFiltering() {
     var label = e.target.parentElement.dataset.label;
     var labelId = e.target.parentElement.dataset.labelId;
     labelFilter.addClass('d-none');
-
+    labelClear.addClass('d-none');
     if (label === labelColumn.search())
       labelColumn.search('').draw();
     else
@@ -64,6 +65,7 @@ function labelFiltering() {
 
     if (labelColumn.search() !== '') {
       labelFilter.removeClass('d-none');
+      labelClear.removeClass('d-none');
       labelFilterBadge.removeClass();
       labelFilterBadge.addClass(['badge', `label-${labelId}`]);
       labelFilterBadge.html(label);

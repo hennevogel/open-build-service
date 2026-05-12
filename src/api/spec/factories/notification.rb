@@ -72,6 +72,16 @@ FactoryBot.define do
       end
     end
 
+    factory :notification_for_global_role_assignment, class: 'NotificationUser' do
+      event_type { 'Event::GlobalRoleAssigned' }
+      notifiable factory: [:user]
+      web { true }
+
+      after(:build) do |notification, evaluator|
+        notification.event_payload['user'] ||= evaluator.user.login
+      end
+    end
+
     factory :notification_for_project, class: 'NotificationProject' do
       trait :relationship_create_for_project do
         event_type { 'Event::RelationshipCreate' }
@@ -97,6 +107,11 @@ FactoryBot.define do
 
       trait :build_failure do
         event_type { 'Event::BuildFail' }
+        notifiable factory: [:package]
+      end
+
+      trait :upstream_version do
+        event_type { 'Event::UpstreamPackageVersionChanged' }
         notifiable factory: [:package]
       end
     end

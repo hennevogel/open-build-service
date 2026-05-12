@@ -75,19 +75,13 @@ class BsRequestAction < ApplicationRecord
   end
 
   def check_sanity
-    if action_type.in?(%i[submit release maintenance_incident maintenance_release change_devel])
-      errors.add(:source_project, "should not be empty for #{action_type} requests") if source_project.blank?
-      errors.add(:source_package, "should not be empty for #{action_type} requests") if !maintenance_incident? && source_package.blank?
-      errors.add(:target_project, "should not be empty for #{action_type} requests") if target_project.blank?
-      errors.add(:target_package, 'No source changes are allowed, if source and target is identical') if source_package == target_package && source_project == target_project && (sourceupdate || updatelink)
-    end
     errors.add(:target_package, 'is invalid package name') if target_package && !Package.valid_name?(target_package)
-    errors.add(:source_package, 'is invalid package name') if source_package && !Package.valid_name?(source_package)
     errors.add(:target_project, 'is invalid project name') if target_project && !Project.valid_name?(target_project)
+    errors.add(:source_package, 'is invalid package name') if source_package && !Package.valid_name?(source_package)
     errors.add(:source_project, 'is invalid project name') if source_project && !Project.valid_name?(source_project)
-    errors.add(:source_rev, 'should not be upload') if source_rev == 'upload'
+    return unless source_project.present? && source_package.present? && source_package == target_package && source_project == target_project && (sourceupdate || updatelink)
 
-    # TODO: to be continued
+    errors.add(:target_package, 'No source changes are allowed, if source and target is identical')
   end
 
   def action_type
@@ -332,7 +326,7 @@ class BsRequestAction < ApplicationRecord
           end
         else
           sprj = Project.find_by_name(source_project)
-          reviews.push(sprj) if sprj && !User.session!.can_modify?(sprj) && !sprj.find_attribute('OBS', 'ApprovedRequestSource') && !sprj.find_attribute('OBS', 'ApprovedRequestSource')
+          reviews.push(sprj) if sprj && !User.session!.can_modify?(sprj) && !sprj.find_attribute('OBS', 'ApprovedRequestSource')
         end
       end
     end
@@ -594,7 +588,7 @@ class BsRequestAction < ApplicationRecord
     new_packages.each do |pkg|
       release_targets = pkg.patchinfo? ? Patchinfo.new.fetch_release_targets(pkg) : nil
       new_targets.each do |new_target_project|
-        next if release_targets.present? && !release_targets.any? { |rt| rt['project'] == new_target_project.name }
+        next if release_targets.present? && release_targets.none? { |rt| rt['project'] == new_target_project.name }
 
         # skip if there is no active maintenance trigger for this package
         next if maintenance_release? && !matching_target?(pkg.project, new_target_project)
@@ -970,7 +964,10 @@ class BsRequestAction < ApplicationRecord
       end
 
       a = tprj.find_attribute('OBS', 'RejectRequests')
-      raise RequestRejected, "The target project #{target_project} is not accepting requests because: #{a.values.first.value}" if a && a.values.first && (a.values.length < 2 || a.values.find_by_value(action_type))
+      if a && a.values.first && (a.values.length < 2 || a.values.find_by_value(action_type))
+        raise RequestRejected,
+              "The target project #{target_project} is not accepting requests because: #{a.values.first.value}"
+      end
     end
     if target_package
       if Package.exists_by_project_and_name(target_project, target_package) ||
@@ -1046,6 +1043,7 @@ end
 # Table name: bs_request_actions
 #
 #  id                    :integer          not null, primary key
+#  comments_count        :integer          default(0), not null, indexed
 #  group_name            :string(255)
 #  makeoriginolder       :boolean          default(FALSE)
 #  person_name           :string(255)
@@ -1072,6 +1070,7 @@ end
 #  bs_request_id                                                    (bs_request_id)
 #  index_bs_request_actions_on_bs_request_id_and_target_package_id  (bs_request_id,target_package_id)
 #  index_bs_request_actions_on_bs_request_id_and_target_project_id  (bs_request_id,target_project_id)
+#  index_bs_request_actions_on_comments_count                       (comments_count)
 #  index_bs_request_actions_on_source_package                       (source_package)
 #  index_bs_request_actions_on_source_package_id                    (source_package_id)
 #  index_bs_request_actions_on_source_project                       (source_project)

@@ -47,6 +47,7 @@ use BSHTTP;
 use BSServer;
 use BSUtil;
 use BSFileDB;
+use BSFileQueue;
 use BSXML;
 use BSProductXML;
 use BSVerify;
@@ -134,7 +135,6 @@ BSUtil::set_fdatasync_before_rename() unless $BSConfig::disable_data_sync || $BS
 my $projectsdir = "$BSConfig::bsdir/projects";
 my $eventdir = "$BSConfig::bsdir/events";
 my $srcrep = "$BSConfig::bsdir/sources";
-my $treesdir = $BSConfig::nosharedtrees ? "$BSConfig::bsdir/trees" : $srcrep;
 my $requestsdir = "$BSConfig::bsdir/requests";
 my $oldrequestsdir = "$BSConfig::bsdir/requests.old";
 my $rundir = $BSConfig::rundir || "$BSConfig::bsdir/run";
@@ -411,7 +411,7 @@ sub triggerscmsync {
 sub triggerscmsyncrun {
   my ($cgi, $scmrepo, $scmbranch) = @_;
   for my $ref (BSSrcServer::ScmsyncDB::getscmsyncpackages($scmrepo, $scmbranch)) {
-    my ($projid, $packid) = @$ref;
+    my ($projid, $packid) = split('/', $ref, 2);
     my $proj = BSRevision::readproj_local($projid, 1);
     next unless $proj;
     if ($packid eq '_project') {
@@ -783,22 +783,22 @@ sub addrev {
     $rev->{'time'} = $cgi->{'time'};
   }
 
-  my $acceptinfo;
-  if ($requestid) {
-    $acceptinfo = {};
-    $acceptinfo->{'osrcmd5'} = $rev_old->{'srcmd5'} if $rev_old->{'srcmd5'} ne 'empty';
-    if ($files_old->{'_link'}) {
-      # see if we can expand it
-      eval {
-	my %rev = %$rev_old;
-	my $xfiles = BSSrcServer::Link::handlelinks(\%rev, $files_old);
-	$acceptinfo->{'oxsrcmd5'} = $rev{'srcmd5'} if ref $xfiles;
-      };
-    }
+  my $vrev_old_expanded;
+  my $acceptinfo = {};
+  $acceptinfo->{'osrcmd5'} = $rev_old->{'srcmd5'} if $rev_old->{'srcmd5'} ne 'empty';
+  if ($files_old->{'_link'} && ($cgi->{'withacceptinfo'} || (!defined($cgi->{'vrev'}) && !$files->{'_link'}))) {
+    # see if we can expand it if we need the acceptinfo or this is a link->nolink change
+    eval {
+      my %rev = %$rev_old;
+      my $xfiles = BSSrcServer::Link::handlelinks(\%rev, $files_old);
+      $acceptinfo->{'oxsrcmd5'} = $rev{'srcmd5'} if ref $xfiles;
+      $vrev_old_expanded = $rev{'vrev'};
+    };
   }
+
   if ($packid eq '_project') {
     $rev = BSRevision::addrev_local($cgi, $projid, $packid, $rev);
-    if ($acceptinfo && $cgi->{'withacceptinfo'}) {
+    if ($cgi->{'withacceptinfo'}) {
       $acceptinfo->{'rev'} = $rev->{'rev'};
       $acceptinfo->{'srcmd5'} = $rev->{'srcmd5'};
       $rev->{'acceptinfo'} = $acceptinfo;
@@ -819,6 +819,7 @@ sub addrev {
         ($rev->{'version'} ne 'unknown' && $rev_old->{'version'} eq 'unknown')) {
       my $l_old = 0;
       $l_old = $1 if $rev_old->{'vrev'} =~ /(\d+)$/;
+      $l_old = $1 if !$files->{'_link'} && defined($vrev_old_expanded) && $vrev_old_expanded =~ /(\d+)$/ && $1 > $l_old;
       my $l_new = 0;
       $l_new = $1 if $rev->{'vrev'} =~ /(\d+)$/;
       $rev->{'vrev'} =~ s/\d+$/$l_old + 1/e if $l_old + 1 > $l_new;
@@ -829,7 +830,7 @@ sub addrev {
   $rev = BSRevision::addrev_local($cgi, $projid, $packid, $rev, $files);
 
   # update request acceptinfo
-  if ($acceptinfo && $cgi->{'withacceptinfo'}) {
+  if ($cgi->{'withacceptinfo'}) {
     $acceptinfo->{'rev'} = $rev->{'rev'};
     $acceptinfo->{'srcmd5'} = $rev->{'srcmd5'};
     if ($files->{'_link'}) {
@@ -988,7 +989,7 @@ sub findfile {
     }
   }
 
-  return $files{'_preinstallimage'} if $ext ne 'kiwi' && $ext ne 'productcompose' && $ext ne 'docker' && keys(%files) == 1 && $files{'_preinstallimage'};
+  return $files{'_preinstallimage'} if $ext ne 'kiwi' && $ext ne 'productcompose' && $ext ne 'docker' && $ext ne 'mkosi' && keys(%files) == 1 && $files{'_preinstallimage'};
   return $files{'Chart.yaml'} if $ext eq 'helm';
   return $files{'appimage.yml'} if $ext eq 'appimage';
   return $files{'PKGBUILD'} if $ext eq 'arch';
@@ -1897,6 +1898,10 @@ sub getprojpack {
 		}
 	      }
 	    }
+	    if ($repoid =~ /._reproduciblecheck$/) {
+	      $rinfo->{'name'} = $rinfo->{'file'} = '_reproduciblecheck';
+	      next;
+	    }
 	    my $type = $conf->{'type'};
 	    if (!$type || $type eq 'UNDEFINED') {
 	      $rinfo->{'error'} = 'bad build configuration, no build type defined or detected';
@@ -1962,6 +1967,7 @@ sub getprojpack {
 	    $pinfo->{'versrel'} ||= "$version-$rev->{'vrev'}";
 	    $rinfo->{'name'} = $d->{'name'};
 	    $rinfo->{'dep'} = $d->{'deps'};
+	    $pinfo->{'hasbigdep'} = 1 if @{$d->{'deps'} || []} > 100;
 	    if ($d->{'prereqs'}) {
 	      my %deps = map {$_ => 1} (@{$d->{'deps'} || []}, @{$d->{'subpacks'} || []});
 	      my @prereqs = grep {!$deps{$_} && !/^%/} @{$d->{'prereqs'}};
@@ -2286,7 +2292,7 @@ sub delproject {
 
   unlink("$projectsdir/$projid.conf");
   unlink("$projectsdir/$projid.xml");
-  BSSrcServer::ScmsyncDB::deletescmsync($projid, '_project');
+  BSSrcServer::ScmsyncDB::deletescmsync($projid, undef);	# delete all entries for this project
   notify_repservers('project', $projid);
 
   notify("SRCSRV_DELETE_PROJECT", { "project" => $projid, "comment" => $cgi->{'comment'}, "sender" => ($cgi->{'user'} || "unknown"), "requestid" => $cgi->{'requestid'} });
@@ -2332,7 +2338,14 @@ sub undeleteproject {
     if ($f =~ /\.m?rev\.del$/) {
       BSUtil::cp("$projectsdir/_deleted/$projid.pkg/$f", "$uploaddir/$$.2", "$projectsdir/$projid.pkg/$f");
     } elsif ($f =~ /^(.*)\.(m?rev)$/) {
-      BSRevision::undelete_rev($cgi, $projid, $1, "$projectsdir/_deleted/$projid.pkg/$f", "$projectsdir/$projid.pkg/$f");
+      my $packid = $1;
+      BSRevision::undelete_rev($cgi, $projid, $packid, "$projectsdir/_deleted/$projid.pkg/$f", "$projectsdir/$projid.pkg/$f");
+      if ($f eq "$packid.mrev") {
+        eval {
+          my $d = $packid eq '_project' ? BSRevision::readproj_local($projid, 1) : BSRevision::readpack_local($projid, $packid, 1);
+          BSSrcServer::ScmsyncDB::storescmsync($projid, $packid, $d->{'scmsync'}) if $d && $d->{'scmsync'};
+        };
+      }
     }
   }
   notify_repservers('project', $projid);
@@ -2475,6 +2488,10 @@ sub undeletepackage {
   if (-s "$projectsdir/$projid.pkg/$packid.rev.del") {
     BSRevision::undelete_rev($cgi, $projid, $packid, "$projectsdir/$projid.pkg/$packid.rev.del", "$projectsdir/$projid.pkg/$packid.rev");
   }
+  eval {
+    my $d = BSRevision::readpack_local($projid, $packid, 1);
+    BSSrcServer::ScmsyncDB::storescmsync($projid, $packid, $d->{'scmsync'}) if $d && $d->{'scmsync'};
+  };
   if ($packid eq '_product') {
     my $rev = BSRevision::getrev_local($projid, $packid);
     if ($rev) {
@@ -3724,17 +3741,10 @@ sub moveproject {
   rename("$projectsdir/$oprojid.xml", "$projectsdir/$projid.xml");
   rename("$projectsdir/$oprojid.pkg", "$projectsdir/$projid.pkg") if -e "$projectsdir/$oprojid.pkg";
   rename("$projectsdir/$oprojid.conf", "$projectsdir/$projid.conf") if -e "$projectsdir/$oprojid.conf";
-  if ($BSConfig::nosharedtrees && -e "$treesdir/$oprojid") {
-    # we can't rename the tress as we still want to allow access of the old files via the srcmd5
-    mkdir_p($uploaddir);
-    for my $packid (sort(ls("$treesdir/$oprojid"))) {
-      mkdir_p("$treesdir/$projid/$packid");
-      for my $tree (sort(ls("$treesdir/$oprojid/$packid"))) {
-	next if -e "$treesdir/$projid/$packid/$tree";
-	BSUtil::cp("$treesdir/$oprojid/$packid/$tree", "$uploaddir/$$", "$treesdir/$projid/$packid/$tree");
-      }
-    }
-  }
+
+  # make all trees available in the new project
+  # (we can't rename the trees as we still want to allow access of the old files via the srcmd5)
+  BSSrcrep::copyprojectrees($projid, $oprojid);
 
   # move entries in linkinfo database
   BSRevision::movelinkinfos($projid, $oprojid, BSSrcServer::LinkinfoDB::getlinkpackages($oprojid));
@@ -4495,7 +4505,8 @@ sub getresult {
   my %repoidfilter = map {$_ => 1} @{$cgi->{'repository'} || []};
   my %archfilter = map {$_ => 1} @{$cgi->{'arch'} || []};
   my %view = map {$_ => 1} @{$cgi->{'view'} || ['status']};
-  $view{'status'} = 1 if $view{'versrel'};
+  $view{'status'} = 1 if $view{'versrel'} || $view{'info'};
+  $view{'status'} = 1 if $view{'reproduciblecheck'} && !$view{'summary'};
   my %code = map {$_ => 1} @{$cgi->{'code'} || []};
 
   if ($cgi->{'repository'}) {
@@ -4512,7 +4523,9 @@ sub getresult {
   }
   my @prpas;
   for my $repo (@{$proj->{'repository'} || []}) {
-    next if %repoidfilter && !$repoidfilter{$repo->{'name'}};
+    my $needrepro;
+    $needrepro = 1 if $view{'reproduciblecheck'} && $repo->{'name'} =~ /^(.+)_reproduciblecheck$/ && $repoidfilter{$1};
+    next if %repoidfilter && !$repoidfilter{$repo->{'name'}} && !$needrepro;
     my @archs = @{$repo->{'arch'} || []};
     @archs = grep {$archfilter{$_}} @archs if %archfilter;
     push @prpas, map {"$projid/$repo->{'name'}/$_"} @archs;
@@ -4538,6 +4551,7 @@ sub getresult {
   push @args, 'withstats' if $view{'stats'};
   push @args, 'withinfo' if $view{'info'};
   push @args, 'withversrel' if $view{'versrel'};
+  push @args, 'withreproduciblecheck' if $view{'reproduciblecheck'};
   push @args, 'summary' if $view{'summary'} && !$view{'status'};
   eval {
     $ps = BSWatcher::rpc("$reposerver/_result", $BSXML::resultlist, @args);
@@ -4547,6 +4561,9 @@ sub getresult {
     $ps = {};
   }
   return if $BSStdServer::isajax && !defined($ps);
+  if ($view{'reproduciblecheck'} && %repoidfilter && $ps->{'result'}) {
+    $ps->{'result'} = [ grep {$repoidfilter{$_->{'repository'}}} @{$ps->{'result'}}];
+  }
   if ($view{'summary'} && $view{'status'}) {
     my @order = ('succeeded', 'failed', 'unresolvable', 'broken', 'scheduled');
     my %order = map {$_ => 1} @order;
@@ -4555,15 +4572,18 @@ sub getresult {
       for my $pp (@{$p->{'status'} || []}) {
         $sum{$pp->{'code'}}++ if $pp->{'code'};
       }
+      if ($view{'reproduciblecheck'}) {
+	for my $pp (grep {$_->{'reproduciblecheck'}} @{$p->{'status'} || []}) {
+          $sum{'reproduciblecheck_failed'}++ if $pp->{'reproduciblecheck'} eq 'failed';
+	}
+      }
       my @sum = grep {exists $sum{$_}} @order;
       push @sum, grep {!$order{$_}} sort keys %sum;
       $p->{'summary'} = {'statuscount' => [ map {{'code' => $_, 'count' => $sum{$_}}} @sum ] };
     }
   }
   if (!$view{'status'}) {
-    for my $p (@{$ps->{'result'} || []}) {
-      delete $p->{'status'};
-    }
+    delete $_->{'status'} for @{$ps->{'result'} || []};
   }
   return ($ps, $BSXML::resultlist);
 }
@@ -4573,26 +4593,25 @@ sub getscmresult {
 
   my $scmrepo = $cgi->{'scmrepository'};
   my $scmbranch = $cgi->{'scmbranch'};
+  my $usetrackingbranch = $cgi->{'usetrackingbranch'} ? 1 : undef;
+
+  my %projids;
+  for my $ref (BSSrcServer::ScmsyncDB::getscmsyncpackages($scmrepo, $scmbranch, $usetrackingbranch)) {
+    my ($projid, $packid) = split('/', $ref, 2);
+    $projids{$projid}->{$packid} = 1;
+  }
 
   my $results = [];
 
-  for my $ref (BSSrcServer::ScmsyncDB::getscmsyncpackages($scmrepo, $scmbranch)) {
-    my $projid = @$ref[0];
-
-    my $packids;
-    $packids = [@$ref[1]] unless @$ref[1] eq '_project';
-
-    my $proj = checkprojrepoarch($projid, undef, undef, 1);
-
-    if ($cgi->{'multibuild'} && @$packids[0] ne '_project' && !$BSStdServer::isajax) {
-      $packids = [ BSSrcServer::Multibuild::addmultibuildpackages($projid, undef, @{$packids}) ];
-    }
-
-    if ($packids ne '_project') {
-      my %knownpackids = map {$_ => 1} findpackages($projid, $proj, 1);
-      for (@{$packids}) {
-        die("404 unknown package '$_'\n") if !$knownpackids{$_};
-      }
+  for my $projid (sort keys %projids) {
+    my $proj = BSRevision::readproj_local($projid, 1);
+    next if !$proj || $proj->{'remoteurl'};
+    my @packids = sort keys %{$projids{$projid}};
+    @packids = () if $projids{$projid}->{'_project'};	# hmm?
+    if (@packids) {
+      my %knownpackids = map {$_ => 1} BSRevision::lspackages_local($projid);
+      @packids = grep {$knownpackids{$_}} @packids;
+      @packids = BSSrcServer::Multibuild::addmultibuildpackages($projid, undef, @packids) if $cgi->{'multibuild'};
     }
     my @prpas;
     for my $repo (@{$proj->{'repository'} || []}) {
@@ -4605,7 +4624,7 @@ sub getscmresult {
     my @args;
     push @args, 'lastbuild' if $cgi->{'lastbuild'};
     push @args, map {"prpa=$_"} @prpas;
-    push @args, map {"package=$_"} @{$packids || []};
+    push @args, map {"package=$_"} @packids;
     push @args, map {"code=$_"} @{$cgi->{'code'} || []};
     eval {
       $ps = BSWatcher::rpc("$reposerver/_result", $BSXML::resultlist, @args);
@@ -4614,7 +4633,6 @@ sub getscmresult {
       print "warning: $reposerver: $@";
       $ps = {};
     }
-
     push @$results, @{$ps->{'result'}};
   }
   return ({'result' => $results}, $BSXML::resultlist);
@@ -5413,11 +5431,8 @@ sub pkgsearch_indexfunc {
     return @r;
   }
   if ($path =~ /^linkinfo\/(.*)/) {
-    if (!defined($value)) {
-      return $db->rawvalues($1, $hint, $hintval);
-    } else {
-      return $db->rawkeys($1, $value);
-    }
+    return $db->rawkeys($1, $value) if defined $value;
+    return $db->rawvalues($1, $hint, $hintval);
   }
   if ($path eq 'project') {
     return findprojects() unless defined($value);
@@ -5429,7 +5444,7 @@ sub pkgsearch_indexfunc {
       my %v = map {$_ => 1} grep {s/^.*\///} map {$_} @$lkeys;
       return sort keys %v;
     } else {
-      return grep {/\Q$value\E$/} @$lkeys;
+      return grep {/\/\Q$value\E$/} @$lkeys;
     }
   }
   return ();
@@ -5537,8 +5552,10 @@ sub search_published_updatedb {
     while (@$data) {
       my ($w, $k, $v) = splice(@$data, 0, 3);
       if ($w eq 'repoinfo') {
+        $k =~ s/:/:\//g;
         $db->updatedb_repoinfo($k, $v);
       } elsif ($w eq 'patterninfo') {
+        $k =~ s/:/:\//g;
         $db->updatedb_patterninfo($k, $v);
       } elsif ($w ne 'binary' && $w ne 'pattern') {
         die("bad data type: '$w'\n");
@@ -5751,16 +5768,7 @@ sub pattern_key_to_data {
     splice(@p, 0, 2, "$p[0]$p[1]");
   }
   my $repository = shift(@p);
-  my $res;
-  if ($BSConfig::published_db_sqlite) {
-    my $location = join('/', @p, $filename);
-    my $prp_ext = "$project/$repository";
-    $prp_ext =~ s/:/:\//g;
-    $res = $db->getrecord($prp_ext, $location);
-  } else {
-    $res = $db->rawfetch($key);
-  }
-  $res ||= {};
+  my $res = $db->rawfetch($key) || {};
   $res->{'baseproject'} = $res->{'path'}->[-1]->{'project'} if $res->{'path'};
   $res->{'project'} = $project;
   $res->{'repository'} = $repository;
@@ -5772,7 +5780,10 @@ sub pattern_key_to_data {
 sub published_binary_projectindexfunc {
   my ($db, $path, $value) = @_;
 
-  return $db->getprojectkeys($value) if $BSConfig::published_db_sqlite;
+  if ($BSConfig::published_db_sqlite) {
+    return $db->rawvalues($path) unless defined $value;
+    return $db->rawkeys($path, $value);
+  }
 
   return findprojects() unless defined $value;
   my $proj = BSRevision::readproj_local($value);
@@ -5799,6 +5810,16 @@ sub published_binary_projectindexfunc {
     }
   }
   return sort keys %bins;
+}
+
+sub search_add_scmsyncurl {
+  my ($data) = @_;
+  
+  for my $d (@$data) {
+    next unless $d->{'project'} && $d->{'package'};
+    my $scmsyncurl = BSSrcServer::ScmsyncDB::getscmsyncurl($d->{'project'}, $d->{'package'});
+    $d->{'scmsyncurl'} = $scmsyncurl if $scmsyncurl;
+  }
 }
 
 sub search_add_downloadurl {
@@ -5848,6 +5869,7 @@ sub search_published_binary_id {
   $res->{'limited'} = 'true' if $limit && @$data > $limit;
   splice(@$data, $limit) if $limit && @$data > $limit;
   delete $_->{'path'} for @$data;
+  search_add_scmsyncurl($data) if $cgi->{'withscmsyncurl'};
   search_add_downloadurl($data) if $cgi->{'withdownloadurl'};
   $res->{'binary'} = $data;
   return ($res, $BSXML::collection);
@@ -6292,6 +6314,22 @@ sub getsignkey {
     }
   }
   return ($sk, 'Content-Type: text/plain');
+}
+
+sub getsignpubkey {
+  my ($cgi, $projid) = @_;
+  my ($sk) = getsignkey({%$cgi, 'withpubkey' => 1}, $projid);
+  my $pk;
+  if (!$sk) {
+    if ($BSConfig::sign_project && $BSConfig::sign) {
+      $pk = BSSrcServer::Signkey::getdefaultpubkey($projid, $cgi->{'signtype'}, $cgi->{'signflavor'});
+    } elsif ($BSConfig::keyfile) {
+      $pk = readstr($BSConfig::keyfile, 1)
+    }
+  } else {
+    ($sk, $pk) = split("\n", $sk, 2);
+  }
+  return (($pk || ''), 'Content-Type: text/plain');
 }
 
 sub projid2sslcert {
@@ -7336,16 +7374,8 @@ sub add_redis_notifications {
   my ($payload) = @_;
   my $redisdir = "$eventdir/redis";
   mkdir_p($redisdir) unless -d $redisdir;
-  my $fd;
-  BSUtil::lockopen($fd, '>>', "$redisdir/queue");
-  my $oldsize = -s $fd;
-  for my $d (@$payload) {
-    s/([\000-\037%|=\177-\237])/sprintf("%%%02X", ord($1))/ge for @$d;
-    my $line = join('|', @$d)."\n";
-    (syswrite($fd, $line) || 0) == length($line) || die("syswrite: $!\n");
-  }
-  close($fd);
-  BSUtil::ping("$redisdir/.ping") unless $oldsize > 0;
+  my $needping = BSFileQueue::add_multiple("$redisdir/queue", @$payload);
+  BSUtil::ping("$redisdir/.ping") if $needping;
 }
 
 sub external_notification_redis_dispatch {
@@ -7459,7 +7489,10 @@ sub external_notification_sourcepublish {
 
     my $evname = "${projid}::${packid}::${md5}";
     my $ev = { 'type' => "sourcepublish", 'project' => $projid, 'package' => $packid, 'srcmd5' => $md5 };
-    $ev->{'included'} = \@included if @included;
+    if (@included) {
+      $ev->{'included'} = \@included;
+      $evname .= "::".Digest::MD5::md5_hex(BSUtil::tostorable(\@included));
+    }
     writexml("$sourcepublishdir/.$evname$$", "$sourcepublishdir/$evname", $ev, $BSXML::event);
   }
   BSUtil::ping("$sourcepublishdir/.ping");
@@ -8016,6 +8049,7 @@ my $dispatches = [
 
   # worker/publisher/signer calls
   '/getsignkey $project withpubkey:bool? autoextend:bool? withalgo:bool? signtype:? signflavor:?' => \&getsignkey,
+  '/getpubkey $project autoextend:bool? signtype:? signflavor:?' => \&getsignpubkey,
 
   # event/notification handling
   '!- /lastevents $filter:* start:num? obsname:? client:? block:bool?' => \&lastevents,
@@ -8035,10 +8069,10 @@ my $dispatches = [
   '/search/package/id $match:' => \&search_pack_id,
 
   'POST:/search/published cmd:' => \&search_published_updatedb,
-  '/search/published/binary/id $match: limit:num? withdownloadurl:bool?' => \&search_published_binary_id,
-  '/search/published/binary/name $match: limit:num?' => \&search_published_binary_name,
-  '/search/published/pattern/id $match: limit:num? withdownloadurl:bool?' => \&search_published_pattern_id,
-  '/search/published/repoinfo/id $match: limit:num? withdownloadurl:bool?' => \&search_published_repoinfo_id,
+  '/search/published/binary/id $match: limit:num? withdownloadurl:bool? withscmsyncurl:bool?' => \&search_published_binary_id,
+  '/search/published/binary/name $match: limit:num? withdownloadurl:bool? withscmsyncurl:bool?' => \&search_published_binary_name,
+  '/search/published/pattern/id $match: limit:num? withdownloadurl:bool? withscmsyncurl:bool?' => \&search_published_pattern_id,
+  '/search/published/repoinfo/id $match: limit:num? withdownloadurl:bool? withscmsyncurl:bool?' => \&search_published_repoinfo_id,
 
   # service interface, just for listing for now
   '/service' => \&listservices,
@@ -8058,7 +8092,7 @@ my $dispatches = [
   '/build/_workerstatus scheduleronly:bool? daemonsonly:bool? arch*' => \&getworkerstatus,
   'PUT:/build/_dispatchprios' => \&putdispatchprios,
   '/build/_dispatchprios' => \&getdispatchprios,
-  '/build/_result scmrepository:? scmbranch:? code:? lastbuild:bool? multibuild:bool? locallink:bool?' => \&getscmresult,
+  '/build/_result scmrepository:? scmbranch:? code:? lastbuild:bool? multibuild:bool? locallink:bool? usetrackingbranch:bool?' => \&getscmresult,
   '/build/$project/_availablebinaries url:* path:prp* arch*' => \&getavailablebinaries,
   'POST:/build/$project cmd: repository* arch* package* code:* lastbuild:bool? wipe:* comment:? sysrq:?' => \&docommand,
   '/build/$project' => \&getrepositorylist,

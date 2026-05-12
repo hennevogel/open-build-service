@@ -48,6 +48,7 @@ use BSSched::BuildJob::Package;
 use BSSched::BuildJob::Image;
 use BSSched::BuildJob::Patchinfo;
 use BSSched::BuildJob::PreInstallImage;
+use BSSched::BuildJob::Reproduciblecheck;
 use BSSched::BuildJob::Unknown;
 
 
@@ -76,6 +77,7 @@ my %handlers = (
   'appimage'        => BSSched::BuildJob::Image->new(),
   'livebuild'       => BSSched::BuildJob::Image->new(),
   'simpleimage'     => BSSched::BuildJob::Image->new(),
+  'reproduciblecheck' => BSSched::BuildJob::Reproduciblecheck->new(),
   'unknown'         => BSSched::BuildJob::Unknown->new(),
 
   'default'	    => BSSched::BuildJob::Package->new(),
@@ -198,9 +200,9 @@ sub set_repo_state {
       $newstate->{'scminfo'} = $proj->{'scminfo'} if $proj->{'scminfo'};
     }
   }
-  unlink("$gdst/:schedulerstate.dirty") if $state eq 'scheduling' || $state eq 'broken' || $state eq 'disabled';
   mkdir_p($gdst) unless -d $gdst;
   BSUtil::store("$gdst/.:schedulerstate", "$gdst/:schedulerstate", $newstate) unless BSUtil::identical($oldstate, $newstate);
+  unlink("$gdst/:schedulerstate.dirty") if $state eq 'scheduling' || $state eq 'broken' || $state eq 'disabled';
 }
 
 =head2 wipe - delete this repo
@@ -363,6 +365,22 @@ sub setup {
   return ('blocked', join(', ', BSUtil::unify(map {$_->{'job'}} @$suspend))) if $suspend;
   $ctx->{'repo'} = $repo;
 
+  if ($repoid =~ /._reproduciblecheck$/) {
+    my $reprorepoid = $repoid;
+    $reprorepoid =~ s/_reproduciblecheck$//;
+    my $reprorepo = (grep {$_->{'name'} eq $reprorepoid} @{$proj->{'repository'} || []})[0];
+    if (!($reprorepoid && $reprorepo && grep {$_ eq $myarch} @{$reprorepo->{'arch'} || []})) {
+      return ('broken', "repository $reprorepo does not exist");
+    }
+    $ctx->{'isreprorepo'} = $reprorepoid;
+  } else {
+    my $reprorepoid = "${repoid}_reproduciblecheck";
+    my $reprorepo = (grep {$_->{'name'} eq $reprorepoid} @{$proj->{'repository'} || []})[0];
+    if ($reprorepo && grep {$_ eq $myarch} @{$reprorepo->{'arch'} || []}) {
+      $ctx->{'reprorepoid'} = $reprorepoid;
+    }
+  }
+
   if ($ctx->{'alllocked'}) {
     # shortcut, do simplified setup
     $ctx->{'conf'} = {};
@@ -388,6 +406,7 @@ sub setup {
 
   # set build type
   my $prptype = $bconf->{'type'};
+  $prptype = 'reproduciblecheck' if $ctx->{'isreprorepo'};
   if (!$prptype || $prptype eq 'UNDEFINED') {
     # HACK force to channel if we have a channel package
     $prptype = 'channel' if grep {$_->{'channel'}} values(%{$proj->{'package'} || {}});
@@ -551,7 +570,7 @@ sub wipeobsolete {
       } else {
 	if (exists($pdata->{'originproject'})) {
 	  # package from project link
-	  if (!$linkedbuild || ($linkedbuild ne 'localdep' && $linkedbuild ne 'all' && $linkedbuild ne 'alldirect')) {
+	  if (!$linkedbuild || ($linkedbuild ne 'localdep' && $linkedbuild ne 'all' && $linkedbuild ne 'alldirect' && $linkedbuild ne 'alldirect_or_localdep')) {
 	    $reason = 'excluded';
 	  } elsif ($linkedbuild eq 'alldirect' && !grep {$_->{'project'} eq $pdata->{'originproject'}} @{$proj->{'link'}||[]}) {
 	    $reason = 'excluded';
@@ -757,7 +776,7 @@ sub emulate_depsort2 {
 sub expandandsort {
   my ($ctx) = @_;
 
-  $ctx->{'prpchecktime'} = time();	# package checking starts here
+  $ctx->{'prpcheckstart'} = time();	# package checking starts here
 
   my $gctx = $ctx->{'gctx'};
   my $gdst = $ctx->{'gdst'};
@@ -788,6 +807,7 @@ sub expandandsort {
 
   my $subpacks = $ctx->{'subpacks'};
   my $cross = $ctx->{'conf_host'} ? 1 : 0;
+  my $linkedbuild = $ctx->{'repo'}->{'linkedbuild'};
 
   $ctx->{'experrors'} = \%experrors;
   my $packs = $ctx->{'packs'};
@@ -823,6 +843,15 @@ sub expandandsort {
     } else {
       $buildtype = 'unknown';
     }
+
+    if ($ctx->{'isreprorepo'}) {
+      $buildtype = 'reproduciblecheck' if $buildtype ne 'aggregate' && $buildtype ne 'channel'  && $buildtype ne 'modulemd';
+      $pkg2buildtype{$packid} = $buildtype;
+      $pkg2src{$packid} = '_reproduciblecheck';
+      $pdeps{$packid} = [];
+      next;
+    }
+
     $pkg2buildtype{$packid} = $buildtype;
     $havepatchinfos{$packid} = 1 if $buildtype eq 'patchinfo';
 
@@ -854,11 +883,11 @@ sub expandandsort {
       }
     }
     if (exists($pdata->{'originproject'})) {
-      # this is a package from a project link
-      if (!$repo->{'linkedbuild'} || ($repo->{'linkedbuild'} ne 'localdep' && $repo->{'linkedbuild'} ne 'all' && $repo->{'linkedbuild'} ne 'alldirect')) {
+      # this is a package from a project link, clear deps from excluded packages
+      if (!$linkedbuild || ($linkedbuild ne 'localdep' && $linkedbuild ne 'all' && $linkedbuild ne 'alldirect' && $linkedbuild ne 'alldirect_or_localdep')) {
 	$pdeps{$packid} = [];
 	next;
-      } elsif ($repo->{'linkedbuild'} eq 'alldirect' &&  !grep {$_->{'project'} eq $pdata->{'originproject'}} @{$proj->{'link'}||[]}) {
+      } elsif ($linkedbuild eq 'alldirect' &&  !grep {$_->{'project'} eq $pdata->{'originproject'}} @{$proj->{'link'}||[]}) {
 	$pdeps{$packid} = [];
 	next;
       }
@@ -969,7 +998,7 @@ sub calcrelsynctrigger {
   my $projid = $ctx->{'project'};
   my $repoid = $ctx->{'repository'};
 
-  if ($ctx->{'conf'}->{'buildflags:norelsync'}) {
+  if ($ctx->{'conf'}->{'buildflags:norelsync'} || $ctx->{'isreprorepo'}) {
     $ctx->{'relsynctrigger'} = {};
     $ctx->{'relsyncmax'} = undef;
     return;
@@ -1118,6 +1147,7 @@ sub checkpkgs {
   $ctx->{'building'} = \%building;
   $ctx->{'unfinished'} = \%unfinished;
   $ctx->{'cyclevel'} = {};
+  $ctx->{'prpcheckstart'} ||= time();	# just in case
 
   # now build cychash mapping packages to all other cycle members
   for my $cyc (@{$ctx->{'sccs'} || $ctx->{'cycles'} || []}) {
@@ -1200,12 +1230,12 @@ sub checkpkgs {
     # check if this package is project link excluded
     if (exists($pdata->{'originproject'}) && (!$pdata->{'error'} || $pdata->{'error'} eq 'disabled')) {
       # this is a package from a project link
-      my $repo = $ctx->{'repo'};
-      if (!$repo->{'linkedbuild'} || ($repo->{'linkedbuild'} ne 'localdep' && $repo->{'linkedbuild'} ne 'all' && $repo->{'linkedbuild'} ne 'alldirect')) {
+      my $linkedbuild = $ctx->{'repo'}->{'linkedbuild'};
+      if (!$linkedbuild || ($linkedbuild ne 'localdep' && $linkedbuild ne 'all' && $linkedbuild ne 'alldirect' && $linkedbuild ne 'alldirect_or_localdep')) {
 	$packstatus{$packid} = 'excluded';
 	$packerror{$packid} = 'project link';
 	next;
-      } elsif ($repo->{'linkedbuild'} eq 'alldirect' &&  !grep {$_->{'project'} eq $pdata->{'originproject'}} @{$proj->{'link'}||[]}) {
+      } elsif ($linkedbuild eq 'alldirect' &&  !grep {$_->{'project'} eq $pdata->{'originproject'}} @{$proj->{'link'}||[]}) {
 	$packstatus{$packid} = 'excluded';
 	$packerror{$packid} = 'project link';
 	next;
@@ -1283,6 +1313,10 @@ sub checkpkgs {
       $packerror{$packid} = 'no recipe file';
       next;
     }
+    if ($ctx->{'isreprorepo'} && $buildtype ne 'reproduciblecheck') {
+      $packstatus{$packid} = 'excluded';
+      next;
+    }
     if ($buildtype eq 'modulemd') {
       $packstatus{$packid} = 'excluded';
       next;
@@ -1296,7 +1330,7 @@ sub checkpkgs {
     # hmm, this might be a bad idea...
     my $job = BSSched::BuildJob::jobname($prp, $packid)."-$pdata->{'srcmd5'}";
     my $myjobsdir = $gctx->{'myjobsdir'};
-    if ($myjobsdir && -s "$myjobsdir/$job") {
+    if ($buildtype ne 'reproduciblecheck' && $myjobsdir && -s "$myjobsdir/$job") {
       # print "      - $packid ($buildtype)\n";
       # print "        already scheduled\n";
       my $bconf = $ctx->{'conf'};
@@ -1356,6 +1390,9 @@ sub checkpkgs {
       $aerror = $oldpackstatus->{'packerror'}->{$packid};
       ($astatus, $aerror) = ('blocked', 'delayed') unless $astatus;
       $unfinished{$pname} = 1;
+    } elsif ($astatus eq 'building') {
+      $building{$packid} = $aerror || 'job'; # aerror contains jobid in this case
+      ($astatus, $aerror) = ('scheduled', undef);
     } elsif ($astatus eq 'done') {
       # convert into succeeded/failed depending on :logfiles.fail
       $logfiles_fail ||= { map {$_ => 1} ls ("$ctx->{'gdst'}/:logfiles.fail") };
@@ -1399,7 +1436,7 @@ sub checkpkgs {
   }
 
   # package checking ends here
-  $ctx->{'prpchecktime'} = time() - $ctx->{'prpchecktime'};
+  $ctx->{'prpchecktime'} = time() - $ctx->{'prpcheckstart'};
 
   # send unblockedevents to other schedulers
   if ($ctx->{'sendunblockedevents'}) {
@@ -1437,7 +1474,7 @@ sub checkpkgs {
   } else {
     unlink("$gdst/:packstatus.finished");
   }
-  BSRedisnotify::updateresult("$prp/$myarch", \%packstatus, \%packerror, \%building) if $BSConfig::redisserver;
+  BSRedisnotify::updateresult("$prp/$myarch", \%packstatus, \%packerror, \%building, $proj->{'scmsync'}, $proj->{'scminfo'}) if $BSConfig::redisserver;
 
   # write lastcheck file if we spent more than 2 minutes
   if ($ctx->{'prpchecktime'} > 2 * 60 && $ctx->{'nharder'} > 10 && %{$ctx->{'lastcheck'} || {}}) {

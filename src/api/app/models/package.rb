@@ -88,7 +88,8 @@ class Package < ApplicationRecord
   after_destroy :delete_from_sphinx
 
   after_save :write_to_backend
-  after_save :populate_to_sphinx
+  after_save :populate_to_sphinx, if: :needs_sphinx_update?
+  after_save :delete_upstream_versions, if: -> { anitya_ignore_previously_changed?(from: false, to: true) }
 
   after_rollback :reset_cache
 
@@ -105,7 +106,6 @@ class Package < ApplicationRecord
     where.not(id: PackagesFinder.new.forbidden_packages)
   end
 
-  scope :order_by_name, -> { order('LOWER(name)') }
   scope :for_user, ->(user_id) { joins(:relationships).where(relationships: { user_id: user_id, role_id: Role.hashed['maintainer'] }) }
   scope :related_to_user, ->(user_id) { joins(:relationships).where(relationships: { user_id: user_id }) }
   scope :for_group, ->(group_id) { joins(:relationships).where(relationships: { group_id: group_id, role_id: Role.hashed['maintainer'] }) }
@@ -499,10 +499,6 @@ class Package < ApplicationRecord
     path += "/#{ERB::Util.url_encode(file)}" if file.present?
     path += "?#{opts.to_query}" if opts.present?
     path
-  end
-
-  def source_path(file = nil, opts = {})
-    Package.source_path(project.name, name, file, opts)
   end
 
   def source_file(file, opts = {})
@@ -1332,11 +1328,16 @@ class Package < ApplicationRecord
 
   # Returns an ActiveRecord::Relation with all BsRequest that the package is somehow involved in
   def bs_requests
-    BsRequest.left_outer_joins(:bs_request_actions, :reviews)
-             .where(reviews: { package_id: id })
-             .or(BsRequest.left_outer_joins(:bs_request_actions, :reviews).where(bs_request_actions: { source_package_id: id }))
-             .or(BsRequest.left_outer_joins(:bs_request_actions, :reviews).where(bs_request_actions: { target_package_id: id }))
-             .distinct
+    review_ids = Review.where(package_id: id)
+                       .pluck(:bs_request_id)
+
+    action_ids = BsRequestAction.where(target_package_id: id)
+                                .or(BsRequestAction.where(source_package_id: id))
+                                .pluck(:bs_request_id)
+
+    all_ids = (review_ids + action_ids).compact.uniq
+
+    BsRequest.left_outer_joins(:bs_request_actions, :reviews).where(id: all_ids).distinct
   end
 
   private
@@ -1373,6 +1374,14 @@ class Package < ApplicationRecord
     [new_activity, 100].min
 
     self.activity_index = new_activity
+  end
+
+  def needs_sphinx_update?
+    return true if previously_new_record?
+
+    relevant_columns = %w[name title description project_id activity_index]
+
+    saved_changes.keys.intersect?(relevant_columns)
   end
 
   def populate_to_sphinx
@@ -1418,6 +1427,10 @@ class Package < ApplicationRecord
       errors.add(:report_bug_url, 'Local urls are not allowed')
     end
   end
+
+  def delete_upstream_versions
+    PackageVersionUpstream.where(package: self).destroy_all
+  end
 end
 # rubocop: enable Metrics/ClassLength
 
@@ -1427,7 +1440,9 @@ end
 #
 #  id              :integer          not null, primary key
 #  activity_index  :float(24)        default(100.0)
+#  anitya_ignore   :boolean          default(FALSE), not null
 #  bcntsynctag     :string(255)
+#  comments_count  :integer          default(0), not null, indexed
 #  delta           :boolean          default(TRUE), not null
 #  description     :text(65535)
 #  name            :string(200)      not null, uniquely indexed => [project_id]
@@ -1444,9 +1459,10 @@ end
 #
 # Indexes
 #
-#  devel_package_id_index           (develpackage_id)
-#  index_packages_on_kiwi_image_id  (kiwi_image_id)
-#  packages_all_index               (project_id,name) UNIQUE
+#  devel_package_id_index            (develpackage_id)
+#  index_packages_on_comments_count  (comments_count)
+#  index_packages_on_kiwi_image_id   (kiwi_image_id)
+#  packages_all_index                (project_id,name) UNIQUE
 #
 # Foreign Keys
 #

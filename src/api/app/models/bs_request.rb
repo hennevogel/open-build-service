@@ -29,7 +29,13 @@ class BsRequest < ApplicationRecord
 
   ACTION_NOTIFY_LIMIT = 50
 
-  enum :status, VALID_REQUEST_STATES, instance_methods: false, scopes: false, validate: true
+  # Ensure attribute is declared for the enum in a migration-safe way
+  # This handles cases where the model is loaded during migrations before the status column exists
+  # or when upgrading from older OBS versions
+  if column_names.include?('status')
+    attribute :status, :integer unless attribute_types.key?('status')
+    enum :status, VALID_REQUEST_STATES, instance_methods: false, scopes: false, validate: true
+  end
 
   scope :to_accept_by_time, -> { where(state: %w[new review]).where(accept_at: ...Time.now) }
 
@@ -324,6 +330,30 @@ class BsRequest < ApplicationRecord
 
   def first_target_package
     bs_request_actions.first.target_package
+  end
+
+  # Get the current local version of the source package for single-action submit
+  # requests if anitya distribution is enabled
+  def source_package_latest_local_version
+    return unless bs_request_actions.length == 1
+
+    bs_request_action = bs_request_actions.first
+    return unless bs_request_action.submit?
+    return if bs_request_action.source_project_object&.anitya_distribution_name.blank?
+
+    bs_request_action.source_package_object&.latest_local_version&.version
+  end
+
+  # Get the current local version of the target package for single-action submit
+  # requests if anitya distribution is enabled
+  def target_package_latest_local_version
+    return unless bs_request_actions.length == 1
+
+    bs_request_action = bs_request_actions.first
+    return unless bs_request_action.submit?
+    return if bs_request_action.target_project_object&.anitya_distribution_name.blank?
+
+    bs_request_action.target_package_object&.latest_local_version&.version
   end
 
   def target_package_maintainers
@@ -882,12 +912,12 @@ class BsRequest < ApplicationRecord
 
   # Check if 'user' is maintainer in _all_ request sources:
   def source_maintainer?(user)
-    bs_request_actions.all? { |action| action.source_maintainer?(user) }
+    bs_request_actions.includes(:source_project_object, :source_package_object).all? { |action| action.source_maintainer?(user) }
   end
 
   # Check if 'user' is maintainer in _all_ request targets:
   def target_maintainer?(user)
-    bs_request_actions.all? { |action| action.target_maintainer?(user) }
+    bs_request_actions.includes(:target_package_object, :target_project_object).all? { |action| action.target_maintainer?(user) }
   end
 
   def sanitize!
@@ -1263,6 +1293,7 @@ end
 #  approver           :string(255)
 #  comment            :text(65535)
 #  commenter          :string(255)
+#  comments_count     :integer          default(0), not null, indexed
 #  creator            :string(255)      indexed
 #  description        :text(65535)
 #  number             :integer          uniquely indexed
@@ -1271,12 +1302,14 @@ end
 #  status             :integer          indexed
 #  superseded_by      :integer          indexed
 #  updated_when       :datetime
-#  created_at         :datetime         not null
+#  created_at         :datetime         not null, indexed
 #  updated_at         :datetime         not null
 #  staging_project_id :integer          indexed
 #
 # Indexes
 #
+#  index_bs_requests_on_comments_count      (comments_count)
+#  index_bs_requests_on_created_at          (created_at)
 #  index_bs_requests_on_creator             (creator)
 #  index_bs_requests_on_number              (number) UNIQUE
 #  index_bs_requests_on_staging_project_id  (staging_project_id)

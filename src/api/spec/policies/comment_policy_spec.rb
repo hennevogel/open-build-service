@@ -1,13 +1,13 @@
 RSpec.describe CommentPolicy do
   subject { described_class }
 
-  let(:anonymous_user) { create(:user_nobody) }
+  let(:anonymous_user) { User.find_nobody! }
   let(:comment_author) { create(:confirmed_user, login: 'burdenski') }
   let(:admin_user) { create(:admin_user, login: 'admin') }
   let(:user) { create(:confirmed_user, login: 'tom') }
   let(:other_user) { create(:confirmed_user, login: 'other_user') }
   let(:project) { create(:project, name: 'CommentableProject') }
-  let(:package) { create(:package, :as_submission_source, name: 'CommentablePackage', project: project) }
+  let(:package) { create(:package, name: 'CommentablePackage', project: project) }
   let(:comment) { create(:comment_project, commentable: project, user: comment_author) }
   let(:request) { create(:bs_request_with_submit_action, target_package: package) }
   let(:comment_on_package) { create(:comment_package, commentable: package, user: comment_author) }
@@ -187,7 +187,7 @@ RSpec.describe CommentPolicy do
   permissions :history? do
     let(:staff_user) { create(:staff_user) }
     let(:moderator) { create(:moderator) }
-    let(:comment_moderated) { create(:comment_project, commentable: project, moderated_at: DateTime.now.utc, moderator_id: moderator.id) }
+    let(:comment_moderated) { create(:comment_project, commentable: project, moderated_at: Time.zone.now, moderator_id: moderator.id) }
 
     before do
       Flipper.enable(:content_moderation)

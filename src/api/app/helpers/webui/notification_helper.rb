@@ -6,17 +6,19 @@ module Webui::NotificationHelper
 
   NOTIFICATION_ICON = {
     'BsRequest' => 'fa-code-pull-request', 'Comment' => 'fa-comments',
-    'Package' => 'fa-xmark text-danger',
+    'Package' => 'fa-archive',
     'Report' => 'fa-flag', 'Decision' => 'fa-clipboard-check',
     'Appeal' => 'fa-hand', 'WorkflowRun' => 'fa-book-open',
-    'Group' => 'fa-people-group'
+    'Group' => 'fa-people-group', 'Token::Workflow' => 'fa-key',
+    'User' => 'fa-crown'
   }.freeze
 
   NOTIFICATION_TITLE = {
     'BsRequest' => 'Request notification', 'Comment' => 'Comment notification',
     'Package' => 'Package notification', 'Report' => 'Report notification',
     'Decision' => 'Report decision', 'Appeal' => 'Decision appeal',
-    'WorkflowRun' => 'Workflow run', 'Group' => 'Group members changed'
+    'WorkflowRun' => 'Workflow run', 'Group' => 'Group members changed',
+    'Token::Workflow' => 'Token membership update'
   }.freeze
 
   def truncate_to_first_new_line(text)
@@ -30,6 +32,8 @@ module Webui::NotificationHelper
   def notification_icon(notification)
     if notification.event_type.in?(['Event::RelationshipCreate', 'Event::RelationshipDelete'])
       tag.i(class: %w[fas fa-user-tag], title: 'Relationship notification')
+    elsif notification.event_type.in?(['Event::BuildFail'])
+      tag.i(class: %w[fas fa-xmark text-danger])
     elsif NOTIFICATION_ICON[notification.notifiable_type].present?
       tag.i(class: ['fas', NOTIFICATION_ICON[notification.notifiable_type]], title: NOTIFICATION_TITLE[notification.notifiable_type])
     end
@@ -37,6 +41,8 @@ module Webui::NotificationHelper
 
   def description(notification)
     case notification.event_type
+    when 'Event::BuildFail'
+      description_for_build_failure(notification)
     when 'Event::ReportForUser'
       description_for_user_report(notification)
     when 'Event::ReportForComment'
@@ -63,6 +69,16 @@ module Webui::NotificationHelper
   end
 
   private
+
+  def description_for_build_failure(notification)
+    payload = notification.event_payload
+
+    safe_join([
+                content_tag(:div, "Package: #{payload['project']} / #{payload['package']}"),
+                content_tag(:div, "Repository: #{payload['repository']} / #{payload['arch']}"),
+                content_tag(:div, "Build Reason: #{payload['reason']}")
+              ])
+  end
 
   def number_of_hidden_avatars(avatar_objects)
     [0, avatar_objects.size - MAXIMUM_DISPLAYED_AVATARS].max

@@ -409,7 +409,7 @@ RSpec.describe EventMailer, :vcr do
 
       context 'and there is a payload' do
         it 'renders the body' do
-          expect(mail.body.encoded).to have_text('Last lines of build log:')
+          expect(mail.body.encoded).to have_text('invalid byte sequence ->?')
         end
       end
 
@@ -457,6 +457,44 @@ RSpec.describe EventMailer, :vcr do
         it { expect(mail.text_part.body.to_s).to include('A workflow run failed for Pull request #1, opened') }
         it { expect(mail.html_part.body.to_s).to include('A workflow run failed for Pull request #1, opened') }
         it { expect(mail.html_part.body.to_s).to include("on repository #{workflow_run.repository_owner}/#{workflow_run.repository_name}") }
+      end
+    end
+
+    context 'for an event of type Event::TokenStateChange' do
+      let(:token) { create(:workflow_token, executor: receiver, description: 'Token for GitHub') }
+      let(:workflow_run) { create(:workflow_run, token: token) }
+      let!(:subscription) { create(:event_subscription_token_enabled, user: receiver) }
+      let(:mail) { EventMailer.with(subscribers: Event::TokenStateChange.last.subscribers, event: Event::TokenStateChange.last).notification_email.deliver_now }
+
+      before do
+        login(receiver)
+      end
+
+      context 'when the workflow run fails' do
+        before do
+          workflow_run.update_as_failed('Unauthorized request')
+        end
+
+        it 'gets delivered' do
+          expect(ActionMailer::Base.deliveries).to include(mail)
+        end
+
+        it 'has a subject' do
+          expect(mail.subject).to eq("Workflow Token 'Token for GitHub' was disabled")
+        end
+
+        it 'has the right subscribers' do
+          expect(mail.to).to eq(Event::TokenStateChange.last.subscribers.map(&:email))
+        end
+
+        it 'renders links absolute' do
+          expect(mail.body.encoded).to include('Enable this token again on the ' \
+                                               "<a href=\"https://build.example.com/my/tokens/#{token.id}\">token page</a>")
+        end
+
+        it { expect(mail.text_part.body.to_s).to include("The Workflow Token 'Token for GitHub' was disabled.") }
+        it { expect(mail.html_part.body.to_s).to include("The Workflow Token 'Token for GitHub' was disabled.") }
+        it { expect(mail.html_part.body.to_s).to include('Authentication to Github failed while reporting the build status. Check your tokens authorization setup!') }
       end
     end
 
@@ -748,6 +786,81 @@ RSpec.describe EventMailer, :vcr do
 
       it 'contains the correct text' do
         expect(mail.body.encoded).to include("#{who} unassigned you")
+      end
+    end
+
+    context 'for event of type Event::UpstreamPackageVersionChanged' do
+      let(:user) { create(:confirmed_user) }
+      let(:project) { create(:project, name: 'foo') }
+      let(:package) { create(:package, name: 'bar', project: project) }
+      let!(:subscription) { create(:event_subscription_upstream_version, user: user) }
+
+      let(:mail) { EventMailer.with(subscribers: [user], event: Event::UpstreamPackageVersionChanged.last).notification_email.deliver_now }
+
+      before do
+        login(user)
+        Event::UpstreamPackageVersionChanged.create!(package: package.name, project: package.project.name, upstream_version: '4.9')
+      end
+
+      it 'gets delivered' do
+        expect(ActionMailer::Base.deliveries).to include(mail)
+      end
+
+      it 'sends an email to the subscribed user' do
+        expect(mail.to).to include(user.email)
+      end
+
+      it 'contains the correct subject' do
+        expect(mail.subject).to include("Upstream version changed for #{project.name}/#{package.name} to 4.9")
+      end
+    end
+
+    context 'for event of type Event::TokenMembershipUpdate' do
+      let(:token) { create(:workflow_token) }
+      let!(:subscription) { create(:event_subscription_token_membership_update, user: receiver) }
+      let(:mail) { EventMailer.with(subscribers: Event::TokenMembershipUpdate.last.subscribers, event: Event::TokenMembershipUpdate.last).notification_email.deliver_now }
+
+      before do
+        login(token.executor)
+        Event::TokenMembershipUpdate.create!(token_id: token.id, user_login: receiver.login, action: 'share')
+      end
+
+      it 'gets delivered' do
+        expect(ActionMailer::Base.deliveries).to include(mail)
+      end
+
+      it 'sends an email to the subscribed user' do
+        expect(mail.to).to include(receiver.email)
+      end
+
+      it 'contains the correct subject' do
+        expect(mail.subject).to include('Token membership updated')
+      end
+    end
+
+    context 'for event of type Event::GlobalRoleAssigned' do
+      let(:user) { create(:confirmed_user) }
+      let(:admin_user) { create(:admin_user) }
+      let(:payload) { { role: 'Admin', who: admin_user.login, user: user.login } }
+      let!(:subscription) { create(:event_subscription_global_role_assigned, user: user) }
+      let(:event) { Event::GlobalRoleAssigned.last }
+      let(:mail) { EventMailer.with(subscribers: [user], event: event).notification_email.deliver_now }
+
+      before do
+        login(user)
+        Event::GlobalRoleAssigned.create!(payload)
+      end
+
+      it 'gets delivered' do
+        expect(ActionMailer::Base.deliveries).to include(mail)
+      end
+
+      it 'sends an email to the subscribed user' do
+        expect(mail.to).to include(user.email)
+      end
+
+      it 'contains the correct subject' do
+        expect(mail.subject).to include(event.subject)
       end
     end
   end

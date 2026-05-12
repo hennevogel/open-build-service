@@ -71,6 +71,7 @@ controller 'webui/package' do
     get 'package/edit/:project/:package' => :edit, constraints: cons, as: 'edit_package'
     patch 'package/update' => :update, constraints: cons
     get 'package/autocomplete' => :autocomplete
+    get 'package/autocomplete_users/:project/:package' => :autocomplete_users, constraints: cons, as: 'package_autocomplete_users'
   end
 end
 
@@ -180,6 +181,7 @@ controller 'webui/project' do
   get 'project/autocomplete_incidents' => :autocomplete_incidents, as: 'autocomplete_incidents'
   get 'project/autocomplete_packages' => :autocomplete_packages, as: 'autocomplete_packages'
   get 'project/autocomplete_repositories' => :autocomplete_repositories, as: 'autocomplete_repositories'
+  get 'project/autocomplete_anitya_distributions' => :autocomplete_anitya_distributions, as: 'autocomplete_anitya_distributions'
   get 'project/users/:project' => :users, constraints: cons, as: 'project_users'
   get 'project/subprojects/:project' => :subprojects, constraints: cons, as: 'project_subprojects'
   get 'project/attributes/:project', to: redirect('/attribs/%{project}'), constraints: cons
@@ -272,6 +274,7 @@ resources :projects, only: [], param: :name do
       resources :binaries, controller: 'webui/packages/binaries', only: [:show], constraints: cons, param: :filename, path: 'binaries/:arch/' do
         get :dependency
         get :filelist
+        get :dependencies
       end
       # We wipe all binaries at once, so this is resource instead of resources
       resource :binaries, controller: 'webui/packages/binaries', only: [:destroy], constraints: cons
@@ -348,7 +351,9 @@ resources :requests, only: [], param: :number, controller: 'webui/request' do
 end
 
 get 'projects/:project/requests' => 'webui/projects/bs_requests#index', constraints: cons, as: 'projects_requests'
+get 'projects/:project/requests/counts' => 'webui/projects/bs_requests#counts', constraints: cons
 get 'projects/:project/packages/:package/requests' => 'webui/packages/bs_requests#index', constraints: cons, as: 'packages_requests'
+get 'projects/:project/packages/:package/requests/counts' => 'webui/packages/bs_requests#counts', constraints: cons
 get 'notification/autocomplete_projects' => 'webui/users/notifications#autocomplete_projects', as: 'notification_autocomplete_projects'
 
 controller 'webui/search' do
@@ -374,18 +379,20 @@ end
 
 scope :my do
   resources :tasks, only: [:index], controller: 'webui/users/tasks', as: :my_tasks
-  resources :requests, only: [:index], controller: 'webui/users/bs_requests', as: :my_requests
+  resources :requests, only: [:index], controller: 'webui/users/bs_requests', as: :my_requests do
+    collection do
+      get :counts
+    end
+  end
 
   resources :notifications, only: [:index], controller: 'webui/users/notifications', as: :my_notifications do
     collection do
       # We allow updating multiple notifications in a single HTTP request
       put :update
-      get :count_for_notification_types
-      get :count_for_event_types
-      get :count_for_notification_kinds
       get :count_for_unread
     end
   end
+  get 'my/notifications/counts' => 'webui/users/notifications#counts', constraints: cons
 
   resources :beta_features, only: [:index], controller: 'webui/users/beta_features', as: :my_beta_features
   resource :beta_feature, only: [:update], controller: 'webui/users/beta_features', as: :my_beta_feature
@@ -437,7 +444,11 @@ end
 
 resources :groups, only: %i[index show new create edit update], param: :title, constraints: cons, controller: 'webui/groups' do
   resources :user, only: %i[create destroy update], param: :user_login, constraints: cons, controller: 'webui/groups/users'
-  resources :requests, only: [:index], controller: 'webui/groups/bs_requests'
+  resources :requests, only: [:index], controller: 'webui/groups/bs_requests' do
+    collection do
+      get :counts
+    end
+  end
 
   collection do
     get :autocomplete

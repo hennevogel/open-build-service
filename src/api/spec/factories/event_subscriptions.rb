@@ -118,6 +118,14 @@ FactoryBot.define do
       group { nil }
     end
 
+    factory :event_subscription_token_enabled do
+      eventtype { 'Event::TokenStateChange' }
+      receiver_role { 'token_executor' }
+      channel { :instant_email }
+      user
+      group { nil }
+    end
+
     factory :event_subscription_build_fail do
       eventtype { 'Event::BuildFail' }
       receiver_role { 'maintainer' }
@@ -145,6 +153,30 @@ FactoryBot.define do
     factory :event_subscription_assignment do
       eventtype { 'Event::Assignment' }
       receiver_role { 'assignee' }
+      channel { :instant_email }
+      user
+      group { nil }
+    end
+
+    factory :event_subscription_upstream_version do
+      eventtype { 'Event::UpstreamPackageVersionChanged' }
+      receiver_role { 'develpackage_or_package_maintainer' }
+      channel { :instant_email }
+      user
+      group { nil }
+    end
+
+    factory :event_subscription_token_membership_update do
+      eventtype { 'Event::TokenMembershipUpdate' }
+      receiver_role { 'updated_token_member' }
+      channel { :instant_email }
+      user
+      group { nil }
+    end
+
+    factory :event_subscription_global_role_assigned do
+      eventtype { 'Event::GlobalRoleAssigned' }
+      receiver_role { 'admin_moderator_or_staff' }
       channel { :instant_email }
       user
       group { nil }

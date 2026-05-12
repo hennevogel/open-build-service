@@ -160,6 +160,21 @@ sub check {
   my $projpacks = $gctx->{'projpacks'};
   my $remoteprojs = $gctx->{'remoteprojs'};
 
+  # check if we want a "oneshot" build
+  if ($ctx->{'conf'}->{'buildflags:aggregate-checklocal'} && ($ctx->{'repo'}->{'rebuild'} || 'transitive') eq 'local') {
+    my $old_meta;
+    if (open(F, '<', "$ctx->{'gdst'}/:meta/$packid")) {
+      $old_meta = <F>;
+      chomp $old_meta;
+      close F;
+    }
+    if ($old_meta && $old_meta eq (($pdata->{'verifymd5'} || $pdata->{'srcmd5'})."  $packid")) {
+      print "      - $packid (aggregate)\n";
+      print "        nothing changed (local)\n";
+      return ('done');
+    }
+  }
+
   # first pass: make sure everything looks good and check if we are blocked
   # also patch in package list if it is not present
   for my $aggregate (@$aggregates) {

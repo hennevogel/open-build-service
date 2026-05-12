@@ -36,7 +36,9 @@ class WorkflowRun < ApplicationRecord
   validates :hook_event, inclusion: { in: ALLOWED_GITEA_EVENTS, allow_nil: true, message: "unsupported '%{value}'" }, if: -> { scm_vendor == 'gitea' }
   validates :hook_action, inclusion: { in: ALLOWED_GITHUB_PULL_REQUEST_ACTIONS, allow_nil: true, message: "unsupported '%{value}'" }, if: -> { scm_vendor == 'github' && hook_event == 'pull_request' }
   validates :hook_action, inclusion: { in: ALLOWED_GITEA_PULL_REQUEST_ACTIONS, allow_nil: true, message: "unsupported '%{value}'" }, if: -> { scm_vendor == 'gitea' && hook_event == 'pull_request' }
-  validates :hook_action, inclusion: { in: ALLOWED_GITLAB_PULL_REQUEST_ACTIONS, allow_nil: true, message: "unsupported '%{value}'" }, if: -> { scm_vendor == 'gitlab' && hook_event == 'Merge Request Hook' }
+  validates :hook_action, inclusion: { in: ALLOWED_GITLAB_PULL_REQUEST_ACTIONS, allow_nil: true, message: "unsupported '%{value}'" }, if: lambda {
+    scm_vendor == 'gitlab' && hook_event == 'Merge Request Hook'
+  }
   validate :validate_payload_is_json
 
   belongs_to :token, class_name: 'Token::Workflow', optional: true
@@ -81,7 +83,9 @@ class WorkflowRun < ApplicationRecord
     # "Failed to report back to GitHub: Unauthorized request. Please check your credentials again."
     # "Failed to report back to GitHub: Request is forbidden."
 
-    token.update(enabled: false) if message.include?('Unauthorized request') || /Request (is )?forbidden/.match?(message)
+    return unless message.include?('Unauthorized request') || /Request (is )?forbidden/.match?(message)
+
+    token.update(enabled: false, reason: "Authentication to #{scm_vendor.titleize} failed while reporting the build status. Check your tokens authorization setup!")
   end
 
   # Stores debug info to help figure out what went wrong when trying to save a Status in the SCM.

@@ -61,7 +61,9 @@ sub deletepackage {
   # now do the real delete of the package
   BSRevision::delete_rev($cgi, $projid, $packid, "$projectsdir/$projid.pkg/$packid.rev", "$projectsdir/$projid.pkg/$packid.rev.del");
   BSRevision::delete_rev($cgi, $projid, $packid, "$projectsdir/$projid.pkg/$packid.mrev", "$projectsdir/$projid.pkg/$packid.mrev.del");
-  # get rid of the generated product packages as well
+  # get rid of the generated product packages as well?
+  # update db
+  BSSrcServer::ScmsyncDB::deletescmsync($projid, $packid);
 }
 
 sub undeletepackage {
@@ -71,6 +73,7 @@ sub undeletepackage {
   if (-s "$projectsdir/$projid.pkg/$packid.rev.del") {
     BSRevision::undelete_rev($cgi, $projid, $packid, "$projectsdir/$projid.pkg/$packid.rev.del", "$projectsdir/$projid.pkg/$packid.rev");
   }
+  # we'll always call putpackage next so we don't have to update the scmsyncdb here
 }
 
 sub putpackage {
@@ -191,7 +194,10 @@ sub sync_package {
     $needtrigger = 1 if !$oldpack || $undeleted || ($oldpack->{'scmsync'} || '') ne $pack->{'scmsync'};
     if (!$needtrigger && $info) {
       my $lastrev = eval { BSRevision::getrev_local($projid, $packid) };
-      $needtrigger = 1 if $lastrev && $lastrev->{'comment'} && $lastrev->{'comment'} =~ /\[info=([0-9a-f]{1,128})\]$/ && $info ne $1;
+      if ($lastrev && $lastrev->{'comment'} && $lastrev->{'comment'} =~ /\[info=([0-9a-f]{1,128})\]$/) {
+        my $l = length($1) < length($info) ? length($1) : length($info);
+        $needtrigger = 1 if substr($info, 0, $l) ne substr($1, 0, $l);
+      }
     }
     if ($needtrigger) {
       print "scmsync: trigger $projid/$packid\n";

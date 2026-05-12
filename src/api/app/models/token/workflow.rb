@@ -7,19 +7,27 @@ class Token::Workflow < Token
                           foreign_key: :token_id,
                           association_foreign_key: :user_id,
                           dependent: :destroy,
+                          after_add: ->(token, user) { Event::TokenMembershipUpdate.create(token_id: token.id, user_login: user.login, who: User.session&.login, action: 'share') },
+                          after_remove: ->(token, user) { Event::TokenMembershipUpdate.create(token_id: token.id, user_login: user.login, who: User.session&.login, action: 'unshare') },
                           inverse_of: :users
   has_and_belongs_to_many :groups,
                           join_table: :workflow_token_groups,
                           foreign_key: :token_id,
                           association_foreign_key: :group_id,
                           dependent: :destroy,
+                          after_add: ->(token, group) { Event::TokenMembershipUpdate.create(token_id: token.id, group_title: group.title, who: User.session&.login, action: 'share') },
+                          after_remove: ->(token, group) { Event::TokenMembershipUpdate.create(token_id: token.id, group_title: group.title, who: User.session&.login, action: 'unshare') },
                           inverse_of: :groups
+
+  attr_writer :reason
 
   validates :scm_token, presence: true
   # Either a url referring to the worklflow configuration file or a filepath to the config inside the
   # SCM repository has to be provided
   validates :workflow_configuration_path, presence: true, unless: -> { workflow_configuration_url.present? }
   validates :workflow_configuration_url, presence: true, unless: -> { workflow_configuration_path.present? }
+
+  after_save :state_change_event, if: :enabled_previously_changed?
 
   def call(options)
     set_triggered_at
@@ -29,7 +37,8 @@ class Token::Workflow < Token
 
     # We return early with a ping event, since it doesn't make sense to perform payload checks with it, just respond
     if workflow_run.ping_event?
-      SCMStatusReporter.new(event_payload: workflow_run.payload, event_subscription_payload: workflow_run.payload, scm_token: scm_token, workflow_run: workflow_run, event_type: 'success', initial_report: true).call
+      SCMStatusReporter.new(event_payload: workflow_run.payload, event_subscription_payload: workflow_run.payload, scm_token: scm_token, workflow_run: workflow_run, event_type: 'success',
+                            initial_report: true).call
       return []
     end
     yaml_file = Workflows::YAMLDownloader.new(workflow_run, token: self).call
@@ -44,7 +53,8 @@ class Token::Workflow < Token
 
       workflow.call
     end
-    SCMStatusReporter.new(event_payload: workflow_run.payload, event_subscription_payload: workflow_run.payload, scm_token: scm_token, workflow_run: workflow_run, event_type: 'success', initial_report: true).call
+    SCMStatusReporter.new(event_payload: workflow_run.payload, event_subscription_payload: workflow_run.payload, scm_token: scm_token, workflow_run: workflow_run, event_type: 'success',
+                          initial_report: true).call
     # Always returning validation errors to report them back to the SCM in order to help users debug their workflows
     validation_errors
   rescue Octokit::Unauthorized, Gitlab::Error::Unauthorized
@@ -78,6 +88,10 @@ class Token::Workflow < Token
 
       error_messages.flatten
     end
+  end
+
+  def state_change_event
+    Event::TokenStateChange.create(id: workflow_runs.last&.id, token_id: id, reason: @reason, enabled: enabled)
   end
 end
 

@@ -17,12 +17,9 @@ class BsRequestActionSetBugowner < BsRequestAction
   #### private
 
   #### Instance methods (public and then protected/private)
-  def check_sanity
-    super
-    return unless person_name.blank? && group_name.blank?
-
-    errors.add(:person_name, 'Either person or group needs to be set')
-  end
+  validates :source_project, :source_package, :source_rev, :sourceupdate, :role, :target_releaseproject, :target_repository, absence: true
+  validates :person_name, presence: true, unless: :group_name
+  validates :group_name, presence: true, unless: :person_name
 
   def uniq_key
     "setbugowner/#{target_project}/#{target_package}"
@@ -60,6 +57,7 @@ end
 # Table name: bs_request_actions
 #
 #  id                    :integer          not null, primary key
+#  comments_count        :integer          default(0), not null, indexed
 #  group_name            :string(255)
 #  makeoriginolder       :boolean          default(FALSE)
 #  person_name           :string(255)
@@ -86,6 +84,7 @@ end
 #  bs_request_id                                                    (bs_request_id)
 #  index_bs_request_actions_on_bs_request_id_and_target_package_id  (bs_request_id,target_package_id)
 #  index_bs_request_actions_on_bs_request_id_and_target_project_id  (bs_request_id,target_project_id)
+#  index_bs_request_actions_on_comments_count                       (comments_count)
 #  index_bs_request_actions_on_source_package                       (source_package)
 #  index_bs_request_actions_on_source_package_id                    (source_package_id)
 #  index_bs_request_actions_on_source_project                       (source_project)

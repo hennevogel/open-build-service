@@ -57,27 +57,30 @@ end
 #
 # Table name: projects
 #
-#  id                       :integer          not null, primary key
-#  anitya_distribution_name :string(255)
-#  delta                    :boolean          default(TRUE), not null
-#  description              :text(65535)
-#  kind                     :string           default("standard")
-#  name                     :string(200)      not null, uniquely indexed
-#  remoteproject            :string(255)
-#  remoteurl                :string(255)
-#  report_bug_url           :string(8192)
-#  required_checks          :string(255)
-#  scmsync                  :text(65535)
-#  title                    :string(255)
-#  url                      :string(255)
-#  created_at               :datetime
-#  updated_at               :datetime
-#  develproject_id          :integer          indexed
-#  staging_workflow_id      :integer          indexed
+#  id                            :integer          not null, primary key
+#  anitya_distribution_name      :string(255)
+#  anitya_distribution_synced_at :datetime
+#  comments_count                :integer          default(0), not null, indexed
+#  delta                         :boolean          default(TRUE), not null
+#  description                   :text(65535)
+#  kind                          :string           default("standard")
+#  name                          :string(200)      not null, uniquely indexed
+#  remoteproject                 :string(255)
+#  remoteurl                     :string(255)
+#  report_bug_url                :string(8192)
+#  required_checks               :string(255)
+#  scmsync                       :text(65535)
+#  title                         :string(255)
+#  url                           :string(255)
+#  created_at                    :datetime
+#  updated_at                    :datetime
+#  develproject_id               :integer          indexed
+#  staging_workflow_id           :integer          indexed
 #
 # Indexes
 #
 #  devel_project_id_index                 (develproject_id)
+#  index_projects_on_comments_count       (comments_count)
 #  index_projects_on_staging_workflow_id  (staging_workflow_id)
 #  projects_name_index                    (name) UNIQUE
 #

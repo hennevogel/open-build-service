@@ -78,7 +78,7 @@ class Repository < ApplicationRecord
 
   def self.find_by_project_and_name!(project, repo)
     result = find_by_project_and_name(project, repo)
-    return ActiveRecord::RecordNotFound if result.blank?
+    raise ActiveRecord::RecordNotFound if result.blank?
 
     result
   end
@@ -94,17 +94,6 @@ class Repository < ApplicationRecord
     # does not exist, so let's create it
     project = Project.deleted_instance
     project.repositories.find_or_create_by!(name: 'deleted')
-  end
-
-  def self.new_from_distribution(distribution)
-    target_repository = find_by_project_and_name!(distribution.project, distribution.repository)
-    distribution_repository = new(name: distribution.reponame)
-    distribution_repository.path_elements.build(link: target_repository)
-    distribution.architectures.each do |architecture|
-      distribution_repository.repository_architectures.build(architecture: architecture)
-    end
-
-    distribution_repository
   end
 
   def cleanup_before_destroy
@@ -220,7 +209,7 @@ class Repository < ApplicationRecord
 
   def extended_name
     long_name = project.name.tr(':', '_')
-    if project.repositories.many? && !(name == 'standard')
+    if project.repositories.many? && name != 'standard'
       # keep short names if project has just one repo
       long_name += "_#{name}"
     end

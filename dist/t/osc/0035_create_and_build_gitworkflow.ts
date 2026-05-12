@@ -30,8 +30,6 @@ my $PKG     = "obs-gitworkflow-testpackage";
 
 bail_on_fail;
 
-my $TMP_DIR="$FindBin::Bin/tmp/";
-
 if ( -f "$TMP_DIR/.SKIP" ) {
   plan skip_all => "Previous tests failed - keeping results";
   exit 0;
@@ -68,11 +66,30 @@ sub prepare_tmp_dir {
 }
 
 sub create_gitea_migration {
+
+  my $hooks_param = {
+    'headers' => [ 'Content-Type: application/json' ],
+    'uri'     => "https://obsadmin:opensuse\@$fqhn/gitea/api/v1/admin/hooks",
+    'request' => 'POST',
+    'data'    => '{'.
+      '"config": {'.
+        '"url": "http://localhost:9998/repositoryevent", "content_type": "json"'.
+      '},'.
+      '"events": ['.
+        '"create", "delete", "fork", "push", "repository", "release"'.
+      '],'.
+      '"type": "gitea",'.
+      '"active": true'.
+      '}',
+  };
+
+  BSRPC::rpc($hooks_param);
+
   my $param = {
     'headers' => [ 'Content-Type: application/json' ],
     'uri'     => "https://obsadmin:opensuse\@$fqhn/gitea/api/v1/repos/migrate",
     'request' => 'POST',
-    'data'    => '{"clone_addr": "https://github.com/openSUSE/'.$PKG.'", "repo_name": "'.$PKG.'", "default_branch": "master", "private": false, "mirror": true}',
+    'data'    => '{"clone_addr": "https://github.com/openSUSE/'.$PKG.'", "repo_name": "'.$PKG.'", "default_branch": "master", "private": false, "mirror": false}',
   };
   BSRPC::rpc($param);
 }

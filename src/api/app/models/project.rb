@@ -25,9 +25,9 @@ class Project < ApplicationRecord
 
   after_destroy :delete_from_sphinx
   after_save :discard_cache
-  after_save :populate_to_sphinx
+  after_save :populate_to_sphinx, if: :needs_sphinx_update?
 
-  after_save :fetch_upstream_package_version, :fetch_local_package_version, if: -> { saved_change_to_anitya_distribution_name? }
+  after_save :sync_upstream_package_version, :sync_local_package_version, if: -> { saved_change_to_anitya_distribution_name? }
   after_rollback :reset_cache
   after_rollback :discard_cache
 
@@ -109,7 +109,7 @@ class Project < ApplicationRecord
   scope :related_to_user, ->(user_id) { joins(:relationships).where(relationships: { user_id: user_id }) }
   scope :for_group, ->(group_id) { joins(:relationships).where(relationships: { group_id: group_id, role_id: Role.hashed['maintainer'] }) }
   scope :related_to_group, ->(group_id) { joins(:relationships).where(relationships: { group_id: group_id }) }
-  scope :with_package_templates, -> { joins(attribs: [attrib_type: [:attrib_namespace]]).where(attribs: { attrib_types: { name: 'PackageTemplates', attrib_namespaces: { name: 'OBS' } } }) }
+  scope :with_package_templates, -> { joins(attribs: [{ attrib_type: [:attrib_namespace] }]).where(attribs: { attrib_types: { name: 'PackageTemplates', attrib_namespaces: { name: 'OBS' } } }) }
 
   validates :name, presence: true, length: { maximum: 200 }, uniqueness: { case_sensitive: true }
   validates :title, length: { maximum: 250 }
@@ -117,6 +117,9 @@ class Project < ApplicationRecord
   validate :valid_name
   validates :anitya_distribution_name, length: { maximum: 200 }
   validates :kind, inclusion: { in: TYPES }
+  validates :anitya_distribution_name,
+            inclusion: { in: ->(_project) { Project.values_for_anitya_distributions }, message: '%{value} is not a valid Anitya distribution' },
+            allow_blank: true
 
   class << self
     def home?(name)
@@ -360,7 +363,7 @@ class Project < ApplicationRecord
 
           # try to remove the repository
           # but never remove the special repository named "deleted"
-          if !(repo == deleted_repository) && !User.possibly_nobody.can_modify?(project)
+          if repo != deleted_repository && !User.possibly_nobody.can_modify?(project)
             # permission check
             return { error: "No permission to remove a repository in project '#{project.name}'" }
           end
@@ -380,6 +383,22 @@ class Project < ApplicationRecord
     def very_important_projects_with_categories
       ProjectsWithVeryImportantAttributeFinder.new.call.map do |p|
         [p.name, p.title, p.categories]
+      end
+    end
+
+    def values_for_anitya_distributions
+      distributions = Rails.cache.read('anitya_distributions')
+      return distributions[:names] if distributions.present? && distributions[:created_at] > 12.hours.ago
+
+      url = URI('https://release-monitoring.org/api/distro/names')
+      begin
+        response = Net::HTTP.get(url)
+        results = JSON.parse(response)['distro'].sort
+        Rails.cache.write('anitya_distributions', { names: results, created_at: Time.current })
+
+        results
+      rescue StandardError
+        distributions.present? ? distributions[:names] : []
       end
     end
     # class_methods
@@ -480,11 +499,9 @@ class Project < ApplicationRecord
     end
   end
 
-  def find_repos(sym)
+  def find_repos(sym, &)
     repositories.each do |repo|
-      repo.send(sym).each do |lrep|
-        yield lrep
-      end
+      repo.send(sym).each(&)
     end
   end
 
@@ -1342,11 +1359,16 @@ class Project < ApplicationRecord
 
   # Returns an ActiveRecord::Relation with all BsRequest that the project is somehow involved in
   def bs_requests
-    BsRequest.left_outer_joins(:bs_request_actions, :reviews)
-             .where(reviews: { project_id: id })
-             .or(BsRequest.left_outer_joins(:bs_request_actions, :reviews).where(bs_request_actions: { source_project_id: id }))
-             .or(BsRequest.left_outer_joins(:bs_request_actions, :reviews).where(bs_request_actions: { target_project_id: id }))
-             .distinct
+    review_ids = Review.where(project_id: id)
+                       .pluck(:bs_request_id)
+
+    action_ids = BsRequestAction.where(target_project_id: id)
+                                .or(BsRequestAction.where(source_project_id: id))
+                                .pluck(:bs_request_id)
+
+    all_ids = (review_ids + action_ids).compact.uniq
+
+    BsRequest.left_outer_joins(:bs_request_actions, :reviews).where(id: all_ids).distinct
   end
 
   private
@@ -1465,6 +1487,14 @@ class Project < ApplicationRecord
     combined_status_reports.map(&:missing_checks).flatten
   end
 
+  def needs_sphinx_update?
+    return true if previously_new_record?
+
+    relevant_columns = %w[name title description]
+
+    saved_changes.keys.intersect?(relevant_columns)
+  end
+
   def populate_to_sphinx
     PopulateToSphinxJob.perform_later(id: id, model_name: :project)
   end
@@ -1473,12 +1503,12 @@ class Project < ApplicationRecord
     DeleteFromSphinxJob.perform_later(id, self.class)
   end
 
-  def fetch_upstream_package_version
-    FetchUpstreamPackageVersionJob.perform_later(project_name: name)
+  def sync_upstream_package_version
+    SyncUpstreamPackageVersionJob.perform_later(project_name: name)
   end
 
-  def fetch_local_package_version
-    FetchLocalPackageVersionJob.perform_later(name)
+  def sync_local_package_version
+    SyncLocalPackageVersionJob.perform_later(name)
   end
 end
 
@@ -1488,27 +1518,30 @@ end
 #
 # Table name: projects
 #
-#  id                       :integer          not null, primary key
-#  anitya_distribution_name :string(255)
-#  delta                    :boolean          default(TRUE), not null
-#  description              :text(65535)
-#  kind                     :string           default("standard")
-#  name                     :string(200)      not null, uniquely indexed
-#  remoteproject            :string(255)
-#  remoteurl                :string(255)
-#  report_bug_url           :string(8192)
-#  required_checks          :string(255)
-#  scmsync                  :text(65535)
-#  title                    :string(255)
-#  url                      :string(255)
-#  created_at               :datetime
-#  updated_at               :datetime
-#  develproject_id          :integer          indexed
-#  staging_workflow_id      :integer          indexed
+#  id                            :integer          not null, primary key
+#  anitya_distribution_name      :string(255)
+#  anitya_distribution_synced_at :datetime
+#  comments_count                :integer          default(0), not null, indexed
+#  delta                         :boolean          default(TRUE), not null
+#  description                   :text(65535)
+#  kind                          :string           default("standard")
+#  name                          :string(200)      not null, uniquely indexed
+#  remoteproject                 :string(255)
+#  remoteurl                     :string(255)
+#  report_bug_url                :string(8192)
+#  required_checks               :string(255)
+#  scmsync                       :text(65535)
+#  title                         :string(255)
+#  url                           :string(255)
+#  created_at                    :datetime
+#  updated_at                    :datetime
+#  develproject_id               :integer          indexed
+#  staging_workflow_id           :integer          indexed
 #
 # Indexes
 #
 #  devel_project_id_index                 (develproject_id)
+#  index_projects_on_comments_count       (comments_count)
 #  index_projects_on_staging_workflow_id  (staging_workflow_id)
 #  projects_name_index                    (name) UNIQUE
 #

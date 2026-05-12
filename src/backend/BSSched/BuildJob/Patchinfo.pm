@@ -396,7 +396,7 @@ sub build_ptf_job {
   }
   $patchinfo->{'version'} ||= 1;
   $patchinfo->{'description'} =~ s/\n+$//s if $patchinfo->{'description'};
-  my @ptfspec = split("\n", readstr("$obssrcdir/obs-ptf.spec"));
+  my @ptfspec = split("\n", readstr("$obssrcdir/templates/obs-ptf.spec"));
   for my $ptfline (splice @ptfspec) {
     $ptfline =~ s/\@patchinfo-(.*?)\@/$patchinfo->{$1}/ge;
     if ($ptfline =~ /\@(filtered-)?rpm-.*?\@/) {
@@ -711,16 +711,16 @@ sub build {
 
   # fetch defined issue trackers from src server. FIXME: cache this
   # XXX: this is not an async call!
-  my @references;
-  my $issue_trackers;
   my $param = {
     'uri' => "$BSConfig::srcserver/issue_trackers",
     'timeout' => 30,
   };
-  eval {
-    $issue_trackers = BSRPC::rpc($param, $BSXML::issue_trackers);
-  };
-  warn($@) if $@;
+  my $issue_trackers = eval { BSRPC::rpc($param, $BSXML::issue_trackers) };
+  if ($@) {
+    warn($@);
+    $broken ||= 'could not retrieve issue trackers';
+  }
+  my @references;
   if ($issue_trackers) {
     for my $b (@{$patchinfo->{'issue'} || []}) {
       my $it = (grep {$_->{'name'} eq $b->{'tracker'}} @{$issue_trackers->{'issue-tracker'} || []})[0];

@@ -387,8 +387,25 @@ sub getsigndata {
 
 ##########################################################################
 
+sub have_good_project_signkey {
+  my ($signargs) = @_;
+  return 0 unless @{$signargs || []} >= 2;
+  return 0 if $signargs->[0] ne '-P';
+  return (-s $signargs->[1]) >= 10;
+}
+
 sub get_cert {
   my ($projid, $signargs, $signtype, $signflavor) = @_;
+
+  if (have_good_project_signkey($signargs)) {
+    # have project signing key, ask the source server for the corresponding cert
+    my @args = ("project=$projid", "autoextend=1");
+    push @args, "signtype=$signtype" if $signtype;
+    push @args, "signflavor=$signflavor" if $signflavor;
+    my $cert = eval { BSRPC::rpc("$BSConfig::srcserver/getsslcert", undef, @args) };
+    warn($@) if $@;
+    return $cert if $cert;
+  }
   my @signargs;
   push @signargs, '--project', $projid if $BSConfig::sign_project;
   push @signargs, '--signtype', $signtype if $BSConfig::sign_type || $BSConfig::sign_type;
@@ -432,14 +449,11 @@ sub create_detached_cms_signature {
   mkdir_p($uploaddir);
   writestr("$uploaddir/publisher.$$.cert", undef, $data->{'cms_cert'});
 
-  if (qsystem($BSConfig::sign, @signargs, '--cmssign', '--cert', "$uploaddir/publisher.$$.cert", '-h', 'sha512', $file)) {
+  if (qsystem($BSConfig::sign, @signargs, '--cmssign', '--cert', "$uploaddir/publisher.$$.cert", '--cms-nocerts', '-h', 'sha512', $file)) {
     unlink("$uploaddir/publisher.$$.cert");
     die("    cms sign failed: $?\n");
   }
   unlink("$uploaddir/publisher.$$.cert");
-  my $sig = readstr("$file.p7s");
-  writestr("$file.p7m.$$", "$file.p7m", BSASN1::der2pem($sig, 'CMS'));
-  unlink("$file.p7s");
 }
 
 ##########################################################################
@@ -2047,6 +2061,8 @@ sub mapsleimage {
     $rbin =~ s/\.asc$//;
     $rbin =~ s/\.sha256$//;
     $rbin =~ s/\.sha256.asc$//;
+    $rbin =~ s/\.sha512$//;
+    $rbin =~ s/\.sha512.asc$//;
     $rbin =~ s/\.(?:bz2|gz|xz|zst)$//;
     $rbin =~ s/\.(spdx|cdx)\.json$//;
     $rbin =~ s/\.(install\.iso|install\.tar|iso|packages|raw|tbz|tgz|tar|qcow2|vdi|vhdfixed|vhdx|vmdk|vmx|vagrant\..*\.box)$//;
@@ -2354,19 +2370,18 @@ sub publish {
   # Build repo by mixing all architectures.
   my @archs = @{$repo->{'arch'} || []};
 
-  if ($config->{'publishflags:archsync'}) {
-    my @bad;
-    my $lastchange = 0;
+  if ($config->{'publishflags:archsync'} && @archs > 1) {
     my %as;
     for my $a (@archs) {
-      my $as = BSUtil::retrieve("$reporoot/$prp/$a/:repo/.archsync", 1) || {};
-      $lastchange = $as->{'lastchange'} if ($as->{'lastchange'} || 0) > $lastchange;
-      $as{$a} = $as;
+      $as{$a} = BSUtil::retrieve("$reporoot/$prp/$a/:repo/.archsync", 1) || {};
+      $as{$a}->{'lastchange'} ||= 0;
     }
+    my @as_lastchange = sort {$b->{'lastchange'} <=> $a->{'lastchange'}} map {$as{$_}} @archs;
+    my @bad;
     for my $a (@archs) {
       my $as = $as{$a};
-      push @bad, $a if !$as->{'lastchange'} || !$as->{'lastcheck'} || $as->{'lastcheck'} < $lastchange;
-      $lastchange++ if $as->{'lastcheck'} && $as->{'lastcheck'} == $lastchange;
+      my $oas = $as_lastchange[0] == $as ? $as_lastchange[1] : $as_lastchange[0];
+      push @bad, $a if !$as->{'lastchange'} || !$as->{'lastcheck'} || $as->{'lastcheck'} <= $oas->{'lastchange'};
     }
     if (@bad) {
       print "    delaying publishing as architectures ".join(',', @bad)." are not ready\n";
@@ -2502,7 +2517,7 @@ sub publish {
         my $updateinfoxml = readstr("$r/$bin", 1) || '';
 	$updateinfos_state .= Digest::MD5::md5_hex($updateinfoxml);
 	my $updateinfo = readxml("$r/$bin", $BSXML::updateinfo, 1) || {};
-	push @updateinfos, @{$updateinfo->{'update'} || []};
+	push @updateinfos, grep {($_->{'type'} || '') ne '_internal'} @{$updateinfo->{'update'} || []};
       }
       if ($bin =~ /:_modulemd.yaml$/) {
         my @s = stat("$r/$bin");
@@ -2577,7 +2592,7 @@ sub publish {
       } elsif ($bin =~ /\.slsa_provenance\.json$/) {
 	next;	# we pick them up with the binaries
       } else {
-	if ($bin =~ /\.iso(?:\.sha256(?:\.asc)?)?$/) {
+	if ($bin =~ /\.iso(?:\.sha[0-9]*(?:\.asc)?)?$/) {
 	  $p = "iso/$bin";
 	  $kiwimedium = "$arch/$1" if $bin =~ /(.+)\.iso$/;
 	  $p = mapsleimage($sleimagedata, "$reporoot/$prp/$arch/:repo", $rbin, $p) if $sleimagedata;
